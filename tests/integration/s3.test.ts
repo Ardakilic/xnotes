@@ -88,9 +88,7 @@ describe('S3 adapter against a real S3-compatible mock', () => {
     const path = { prefix: 'ignored-ifmatch/' };
     const conditional = makeAdapter(path);
     const { etag } = await conditional.put(encode(store('gina', 3500)));
-    // s3mock accepts this despite the stale etag — a conditional-only client would clobber
     await conditional.put(encode(store('gina', 3600)), { ifMatch: 'stale-etag' });
-    // the fallback adapter detects the same stale etag and refuses
     const safe = makeAdapter({ ...path, forceHeadFallback: true });
     await expect(safe.put(encode(store('gina', 3700)), { ifMatch: etag })).rejects.toBeInstanceOf(
       SyncConflictError,
@@ -103,7 +101,6 @@ describe('S3 adapter against a real S3-compatible mock', () => {
     expect(etag).not.toBe('');
     const got = await adapter.get();
     expect(got.kind).toBe('found');
-    // unchanged → put with matching ifMatch succeeds via HEAD compare
     await adapter.put(encode(store('erin', 6000)), { ifMatch: etag });
   });
 
@@ -112,7 +109,6 @@ describe('S3 adapter against a real S3-compatible mock', () => {
     const deviceA = makeAdapter(path);
     const deviceB = makeAdapter({ ...path, forceHeadFallback: true });
     const { etag } = await deviceA.put(encode(store('frank', 7000)));
-    // someone else moves the remote behind device B's back
     await deviceA.put(encode(store('frank', 8000)), { ifMatch: etag });
     await expect(
       deviceB.put(encode(store('frank', 9000)), { ifMatch: etag }),

@@ -18,6 +18,7 @@
     "tests/**/*",
     "demo/**/*",
     "vitest.config.ts",
+    "vitest.integration.config.ts",
     "wxt.config.ts"
   ]
 }

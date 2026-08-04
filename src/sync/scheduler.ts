@@ -42,7 +42,6 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let adapterFactory = (backend: BackendSettings): SyncAdapter =>
   backend.backend === 'webdav' ? new WebdavAdapter(backend) : new S3Adapter(backend);
 
-/** Test seam — swap the adapter construction without touching the network. */
 export function setAdapterFactoryForTests(
   factory: (backend: BackendSettings) => SyncAdapter,
 ): void {
@@ -57,15 +56,10 @@ export function isPassphraseSet(): boolean {
   return passphrase !== null;
 }
 
-/** One-shot user confirmation to replace remote plaintext with encrypted data. */
 export function allowPlaintextOverwriteOnce(): void {
   overwritePlaintextOnce = true;
 }
 
-/**
- * One-shot: force the next cycle to PUT even when the plaintext store matches the remote.
- * Needed after passphrase changes or encryption toggles — plaintext unchanged, wire bytes not.
- */
 export function forceNextPush(): void {
   forcePushOnce = true;
 }
@@ -161,23 +155,26 @@ async function syncCycle(
 ): Promise<CycleResult> {
   let etag = knownEtag;
   for (let attempt = 0; attempt < MAX_PUT_ATTEMPTS; attempt++) {
-    const local = await getStore();
-    const localHash = await hashStore(local);
+    const localAtStart = await getStore();
+    const localHashAtStart = await hashStore(localAtStart);
     const remote = await adapter.get(
       etag !== null && etag !== '' ? { ifNoneMatch: etag } : undefined,
     );
 
     if (remote.kind === 'not-modified') {
       const state = await getSyncState();
-      if (state.lastSyncedLocalHash === localHash && !force) return { etag, hash: localHash };
-      // Remote unchanged and local moved on: local already subsumes the last-synced remote
-      // (every successful cycle writes the merge locally), so pushing local is safe.
+      if (state.lastSyncedLocalHash === localHashAtStart && !force)
+        return { etag, hash: localHashAtStart };
+      const local = await getStore();
+      const localHash = await hashStore(local);
       const bytes = await encodeForUpload(local, settings);
       const put = await adapter.put(bytes, etag ? { ifMatch: etag } : { ifNoneMatch: '*' });
       return { etag: put.etag !== '' ? put.etag : etag, hash: localHash };
     }
 
     if (remote.kind === 'not-found') {
+      const local = await getStore();
+      const localHash = await hashStore(local);
       const bytes = await encodeForUpload(local, settings);
       const put = await adapter.put(bytes, { ifNoneMatch: '*' });
       return { etag: put.etag !== '' ? put.etag : null, hash: localHash };
@@ -185,6 +182,8 @@ async function syncCycle(
 
     etag = remote.etag;
     const remoteStore = await decodeRemote(remote.data, settings);
+    const local = await getStore();
+    const localHash = await hashStore(local);
     const merged = merge(local, remoteStore);
     const mergedHash = await hashStore(merged);
     if (mergedHash !== localHash) await saveStore(merged);
@@ -256,7 +255,6 @@ async function cycleOnce(): Promise<void> {
     await saveSyncState(next);
     await updateBadge(next);
   } catch (err) {
-    // keep a requested forced push alive until a cycle actually completes
     if (force) forcePushOnce = true;
     const after = await getSyncState();
     const failureCount = after.failureCount + 1;
@@ -308,7 +306,6 @@ export async function rescheduleAlarm(): Promise<void> {
   }
 }
 
-/** Register all listeners synchronously — call once at background top level. */
 export function initScheduler(): void {
   browser.runtime.onStartup.addListener(() => {
     void runCycle();

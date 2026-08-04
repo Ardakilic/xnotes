@@ -62,6 +62,7 @@ describe('encrypted sync against real dufs', () => {
     const settings: Settings = { backend: webdav, syncIntervalMinutes: 5, encryptionEnabled: true };
     await fakeBrowser.storage.local.set({ 'xnotes:settings': settings });
     setPassphrase(PASSPHRASE);
+    await upsertNote('secretuser', 'a very private note about @secretuser', 'teal', 1000);
 
     await runCycle();
 

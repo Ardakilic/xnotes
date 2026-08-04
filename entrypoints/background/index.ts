@@ -3,6 +3,7 @@ import {
   type BackgroundRequest,
   type BackgroundResponse,
   type SyncStatusResponse,
+  parseBackgroundRequest,
 } from '../../src/core/messages';
 import { getSettings, getSyncState } from '../../src/core/storage';
 import {
@@ -52,14 +53,9 @@ async function handle(msg: BackgroundRequest): Promise<BackgroundResponse> {
 export default defineBackground(() => {
   initScheduler();
   browser.runtime.onMessage.addListener((msg: unknown, _sender, sendResponse) => {
-    if (
-      typeof msg !== 'object' ||
-      msg === null ||
-      typeof (msg as { type?: unknown }).type !== 'string'
-    ) {
-      return;
-    }
-    void handle(msg as BackgroundRequest).then(sendResponse);
+    const parsed = parseBackgroundRequest(msg);
+    if (parsed === null) return;
+    void handle(parsed).then(sendResponse);
     return true;
   });
 });

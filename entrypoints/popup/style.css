@@ -30,8 +30,15 @@ body {
   font-size: 14px;
 }
 
-#popup,
-#onboarding {
+#popup {
+  padding: 12px;
+}
+
+#onboarding:empty {
+  display: none;
+}
+
+#onboarding:not(:empty) {
   padding: 12px;
 }
 

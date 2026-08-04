@@ -145,7 +145,7 @@ describe('put', () => {
       .mockResolvedValueOnce(
         new Response('<Error><Code>NotImplemented</Code></Error>', { status: 400 }),
       )
-      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: '"abc"' } }))
       .mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: '"v3"' } }));
     await expect(new S3Adapter(settings).put(body, { ifMatch: '"abc"' })).resolves.toEqual({
       etag: 'v3',
@@ -157,9 +157,9 @@ describe('put', () => {
     const adapter = new S3Adapter(settings);
     fetchMock
       .mockResolvedValueOnce(new Response(null, { status: 501 }))
-      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: '"abc"' } }))
       .mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: '"v3"' } }))
-      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: '"v3"' } }))
       .mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: '"v4"' } }));
     await adapter.put(body, { ifMatch: '"abc"' });
     await adapter.put(body, { ifMatch: '"v3"' });
@@ -187,6 +187,20 @@ describe('put', () => {
       new S3Adapter({ ...settings, forceHeadFallback: true }).put(body, { ifMatch: '"abc"' }),
     ).rejects.toThrow(SyncConflictError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('HEAD-compare reports conflict on 404 when ifMatch is set (remote vanished)', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 404 }));
+    await expect(
+      new S3Adapter({ ...settings, forceHeadFallback: true }).put(body, { ifMatch: '"abc"' }),
+    ).rejects.toThrow(SyncConflictError);
+  });
+
+  it('HEAD-compare reports conflict when ifNoneMatch is * and the blob exists', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: '"x"' } }));
+    await expect(
+      new S3Adapter({ ...settings, forceHeadFallback: true }).put(body, { ifNoneMatch: '*' }),
+    ).rejects.toThrow(SyncConflictError);
   });
 
   it('throws SyncAuthError on PUT 403', async () => {

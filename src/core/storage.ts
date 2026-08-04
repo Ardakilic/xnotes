@@ -29,14 +29,16 @@ function contextAlive(): boolean {
   }
 }
 
-async function safeRead(key: string): Promise<unknown> {
-  if (!contextAlive()) return undefined;
+type ReadResult = { ok: true; value: unknown } | { ok: false };
+
+async function safeRead(key: string): Promise<ReadResult> {
+  if (!contextAlive()) return { ok: true, value: undefined };
   try {
     const result = await browser.storage.local.get(key);
-    return result[key];
+    return { ok: true, value: result[key] };
   } catch {
-    // ponytail: fail-soft — storage errors and invalidated contexts read as absent
-    return undefined;
+    // ponytail: fail-soft — storage errors return failure, not absence
+    return { ok: false };
   }
 }
 
@@ -90,18 +92,24 @@ export function toStoreV2(value: unknown): StoreV2 | null {
   if (schemaVersion !== 1 && schemaVersion !== 2) return null;
   const rawNotes = value['notes'];
   if (!isRecord(rawNotes)) return null;
-  const notes: Record<string, NoteRecord> = {};
+  const notes: Record<string, NoteRecord> = Object.create(null);
   for (const [key, entry] of Object.entries(rawNotes)) {
     const record = toNoteRecord(entry, key);
     if (record !== null) notes[record.handleLower] = record;
   }
-  const tombstones: Record<string, number> = {};
+  const tombstones: Record<string, number> = Object.create(null);
   if (schemaVersion === 2) {
     const rawTombstones = value['tombstones'];
     if (isRecord(rawTombstones)) {
       for (const [key, deletedAt] of Object.entries(rawTombstones)) {
-        if (typeof deletedAt === 'number' && Number.isFinite(deletedAt))
-          tombstones[key] = deletedAt;
+        if (typeof deletedAt === 'number' && Number.isFinite(deletedAt)) {
+          const normalized = normalizeHandle(key).toLowerCase();
+          if (normalized === '') continue;
+          const existing = tombstones[normalized];
+          if (existing === undefined || deletedAt > existing) {
+            tombstones[normalized] = deletedAt;
+          }
+        }
       }
     }
   }
@@ -109,16 +117,17 @@ export function toStoreV2(value: unknown): StoreV2 | null {
 }
 
 export function emptyStore(): StoreV2 {
-  return { schemaVersion: 2, notes: {}, tombstones: {} };
+  return { schemaVersion: 2, notes: Object.create(null), tombstones: Object.create(null) };
 }
 
 export async function getStore(): Promise<StoreV2> {
   const raw = await safeRead(STORE_KEY);
-  if (raw === undefined) return emptyStore();
-  const parsed = toStoreV2(raw);
+  if (!raw.ok) return emptyStore();
+  if (raw.value === undefined) return emptyStore();
+  const parsed = toStoreV2(raw.value);
   if (parsed !== null) return parsed;
   // ponytail: millisecond key — two corruptions in the same ms would collide, acceptable
-  await safeWrite(CORRUPT_PREFIX + String(Date.now()), raw);
+  await safeWrite(CORRUPT_PREFIX + String(Date.now()), raw.value);
   await safeRemove(STORE_KEY);
   return emptyStore();
 }
@@ -141,10 +150,12 @@ export async function upsertNote(
   if (normalized === '') return;
   const handleLower = normalized.toLowerCase();
   const timestamp = now ?? Date.now();
-  const store = await getStore();
+  const raw = await safeRead(STORE_KEY);
+  if (!raw.ok) return;
+  const store = raw.value === undefined ? emptyStore() : (toStoreV2(raw.value) ?? emptyStore());
   const existing = store.notes[handleLower];
   if (text.trim() === '') {
-    if (existing !== undefined) {
+    if (existing !== undefined || store.tombstones[handleLower] === undefined) {
       delete store.notes[handleLower];
       store.tombstones[handleLower] = timestamp;
       await saveStore(store);
@@ -167,7 +178,9 @@ export async function deleteNote(handle: string, now?: number): Promise<void> {
   const normalized = normalizeHandle(handle);
   if (normalized === '') return;
   const handleLower = normalized.toLowerCase();
-  const store = await getStore();
+  const raw = await safeRead(STORE_KEY);
+  if (!raw.ok) return;
+  const store = raw.value === undefined ? emptyStore() : (toStoreV2(raw.value) ?? emptyStore());
   delete store.notes[handleLower];
   store.tombstones[handleLower] = now ?? Date.now();
   await saveStore(store);
@@ -203,20 +216,24 @@ const DEFAULT_SYNC_STATE: SyncState = {
 
 export async function getSyncState(): Promise<SyncState> {
   const raw = await safeRead(SYNC_STATE_KEY);
-  if (!isRecord(raw)) return { ...DEFAULT_SYNC_STATE };
-  const rawStatus = raw['status'];
+  if (!raw.ok) return { ...DEFAULT_SYNC_STATE };
+  if (!isRecord(raw.value)) return { ...DEFAULT_SYNC_STATE };
+  const rawStatus = raw.value['status'];
   const status: SyncStatus = rawStatus === 'syncing' || rawStatus === 'error' ? rawStatus : 'idle';
-  const rawLastSyncAt = raw['lastSyncAt'];
-  const rawFailureCount = raw['failureCount'];
+  const rawLastSyncAt = raw.value['lastSyncAt'];
+  const rawFailureCount = raw.value['failureCount'];
   return {
-    deviceId: typeof raw['deviceId'] === 'string' ? raw['deviceId'] : '',
+    deviceId: typeof raw.value['deviceId'] === 'string' ? raw.value['deviceId'] : '',
     lastSyncAt:
       typeof rawLastSyncAt === 'number' && Number.isFinite(rawLastSyncAt) ? rawLastSyncAt : null,
-    lastRemoteEtag: typeof raw['lastRemoteEtag'] === 'string' ? raw['lastRemoteEtag'] : null,
+    lastRemoteEtag:
+      typeof raw.value['lastRemoteEtag'] === 'string' ? raw.value['lastRemoteEtag'] : null,
     status,
-    lastError: typeof raw['lastError'] === 'string' ? raw['lastError'] : null,
+    lastError: typeof raw.value['lastError'] === 'string' ? raw.value['lastError'] : null,
     lastSyncedLocalHash:
-      typeof raw['lastSyncedLocalHash'] === 'string' ? raw['lastSyncedLocalHash'] : null,
+      typeof raw.value['lastSyncedLocalHash'] === 'string'
+        ? raw.value['lastSyncedLocalHash']
+        : null,
     failureCount:
       typeof rawFailureCount === 'number' && Number.isFinite(rawFailureCount) && rawFailureCount > 0
         ? Math.floor(rawFailureCount)
@@ -258,15 +275,15 @@ function parseBackend(value: unknown): BackendSettings | null {
 
 export async function getSettings(): Promise<Settings> {
   const raw = await safeRead(SETTINGS_KEY);
-  if (!isRecord(raw)) return { ...DEFAULT_SETTINGS };
-  const rawInterval = raw['syncIntervalMinutes'];
+  if (!raw.ok || !isRecord(raw.value)) return { ...DEFAULT_SETTINGS };
+  const rawInterval = raw.value['syncIntervalMinutes'];
   return {
-    backend: parseBackend(raw['backend']),
+    backend: parseBackend(raw.value['backend']),
     syncIntervalMinutes:
       typeof rawInterval === 'number' && Number.isFinite(rawInterval)
         ? rawInterval
         : DEFAULT_SETTINGS.syncIntervalMinutes,
-    encryptionEnabled: raw['encryptionEnabled'] === true,
+    encryptionEnabled: raw.value['encryptionEnabled'] === true,
   };
 }
 
@@ -276,7 +293,8 @@ export async function saveSettings(settings: Settings): Promise<void> {
 
 export async function getView(): Promise<ManagerView> {
   const raw = await safeRead(VIEW_KEY);
-  return raw === 'cards' ? 'cards' : 'table';
+  if (!raw.ok) return 'table';
+  return raw.value === 'cards' ? 'cards' : 'table';
 }
 
 export async function saveView(view: ManagerView): Promise<void> {

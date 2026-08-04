@@ -20,3 +20,32 @@ export type BackgroundResponse = { ok: boolean } | SyncStatusResponse;
 export function sendBackground(msg: BackgroundRequest): Promise<BackgroundResponse> {
   return browser.runtime.sendMessage(msg);
 }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const MESSAGE_TYPES = [
+  'sync-now',
+  'get-sync-status',
+  'overwrite-remote-plaintext',
+  'encryption-changed',
+  'backend-activated',
+] as const;
+
+type SimpleMessageType = (typeof MESSAGE_TYPES)[number];
+
+function isSimpleMessageType(value: unknown): value is SimpleMessageType {
+  return typeof value === 'string' && (MESSAGE_TYPES as readonly string[]).includes(value);
+}
+
+export function parseBackgroundRequest(msg: unknown): BackgroundRequest | null {
+  if (!isRecord(msg)) return null;
+  const { type, passphrase } = msg;
+  if (isSimpleMessageType(type)) return { type };
+  if (type === 'set-passphrase') {
+    if (passphrase !== null && typeof passphrase !== 'string') return null;
+    return { type: 'set-passphrase', passphrase };
+  }
+  return null;
+}

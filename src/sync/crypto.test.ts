@@ -28,6 +28,14 @@ const store: StoreV2 = {
 
 const enc = new TextEncoder();
 
+function toWeakenedEnvelope(parsed: unknown, iter: number): Record<string, unknown> {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+    throw new Error('envelope is not a record');
+  const record: Record<string, unknown> = { ...parsed };
+  record['iter'] = iter;
+  return record;
+}
+
 describe('crypto', () => {
   let encrypted: Uint8Array;
 
@@ -72,11 +80,36 @@ describe('crypto', () => {
   });
 
   it('rejects envelopes whose iteration count is below the minimum', async () => {
-    const env = JSON.parse(new TextDecoder().decode(encrypted)) as Record<string, unknown>;
-    env['iter'] = 1000;
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(encrypted));
+    const env = toWeakenedEnvelope(parsed, 1000);
     const weakened = enc.encode(JSON.stringify(env));
     await expect(decryptStore(weakened, 'correct horse')).rejects.toThrow(SyncDecodeError);
     await expect(decryptStore(weakened, 'correct horse')).rejects.toThrow('below minimum');
+  });
+
+  it('rejects envelopes whose iteration count exceeds the maximum', async () => {
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(encrypted));
+    const env = toWeakenedEnvelope(parsed, 99_999_999);
+    const weakened = enc.encode(JSON.stringify(env));
+    await expect(decryptStore(weakened, 'correct horse')).rejects.toThrow(SyncDecodeError);
+    await expect(decryptStore(weakened, 'correct horse')).rejects.toThrow('above maximum');
+  });
+
+  it('rejects fractional iteration counts as malformed', async () => {
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(encrypted));
+    const env = toWeakenedEnvelope(parsed, 600_000.5);
+    const weakened = enc.encode(JSON.stringify(env));
+    await expect(decryptStore(weakened, 'correct horse')).rejects.toThrow(SyncDecodeError);
+    await expect(decryptStore(weakened, 'correct horse')).rejects.toThrow('malformed');
+  });
+
+  it('rejects envelopes with malformed base64 in salt/iv/data', async () => {
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(encrypted));
+    const env = toWeakenedEnvelope(parsed, 600_000);
+    env['salt'] = '!!!not-base64!!!';
+    const weakened = enc.encode(JSON.stringify(env));
+    await expect(decryptStore(weakened, 'correct horse')).rejects.toThrow(SyncDecodeError);
+    await expect(decryptStore(weakened, 'correct horse')).rejects.toThrow('malformed base64');
   });
 
   it(

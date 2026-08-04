@@ -41,10 +41,11 @@ describe('endpoint validation', () => {
     expect(result.errors['endpoint']).toBeDefined();
   });
 
-  it('accepts plain http with a visible warning', () => {
+  it('rejects plain http endpoints', () => {
     const result = validateBackend(webdav({ endpoint: 'http://192.168.1.10:5244' }));
-    expect(result.ok).toBe(true);
-    expect(result.warnings.some((w) => w.toLowerCase().includes('unencrypted'))).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.errors['endpoint']).toBeDefined();
+    expect(result.errors['endpoint']).toMatch(/HTTPS/i);
   });
 
   it('accepts https without warnings', () => {

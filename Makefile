@@ -41,11 +41,11 @@ zip: ## store-ready zips (firefox zip includes sources zip automatically)
 	$(DOCKER) sh -c 'npm run zip && npm run zip:firefox'
 
 dev: ## chromium dev build with HMR; load .output/xnotes-chrome-mv3 as unpacked
-	$(DOCKER) npm run dev
+	$(DOCKER) -p 3000:3000 npm run dev -- --port 3000 --host 0.0.0.0
 
 # ponytail: `dev-firefox` not `dev:firefox` — macOS ships GNU make 3.81, which rejects colons in targets
 dev-firefox: ## firefox dev build; load .output/xnotes-firefox-mv3
-	$(DOCKER) npm run dev:firefox
+	$(DOCKER) -p 3001:3001 npm run dev:firefox -- --port 3001 --host 0.0.0.0
 
 integration: ## dockerized integration tests (dufs + S3 mock)
 	docker compose -f docker/compose.integration.yml up --build --abort-on-container-exit --exit-code-from tests; \

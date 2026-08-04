@@ -2,14 +2,14 @@
 
 ## Context
 
-Greenfield browser extension. The repo currently contains only planning docs. The reference implementation ([piecioshka/twitter-notes](https://github.com/piecioshka/twitter-notes), MIT, ~1,900 lines TS, zero deps, zero tests) was cloned and analyzed; all 12 architectural claims in `x-notes-sync-analysis-and-plan.md` were verified against its source (see "Reference findings" below). Its patterns are adopted as *ideas*; all code is written from scratch, tested, and extended with sync.
+Greenfield browser extension. The repo currently contains only planning docs. The reference implementation ([piecioshka/twitter-notes](https://github.com/piecioshka/twitter-notes), MIT, ~1,900 lines TS, zero deps, zero tests) was cloned and analyzed; all 12 architectural claims in `x-notes-sync-analysis-and-plan.md` were verified against its source (see "Reference findings" below). Its patterns are adopted as _ideas_; all code is written from scratch, tested, and extended with sync.
 
 Constraints:
 
 - One codebase → Chromium MV3 (`background.service_worker`) **and** Firefox/Gecko MV3 (`background.scripts` event page; Firefox does not support `service_worker`). Chrome ≥121 ignores `scripts`, Firefox ≥121 ignores `service_worker`, so a dual-key manifest works — WXT generates this per target.
 - Local-first: extension must be fully usable with no backend configured.
 - Self-hosted sync preferred; no server-side code of ours may exist ("dumb storage + smart client", the floccus archetype).
-- Notes are about *people* → E2E encryption must be available for any third-party-hosted storage.
+- Notes are about _people_ → E2E encryption must be available for any third-party-hosted storage.
 - All dev/CI commands (install, lint, typecheck, test, build, zip) must be runnable through Docker via a Makefile; the developer machine needs only Docker + make.
 
 Reference findings that shape this design (from source analysis of twitter-notes):
@@ -72,10 +72,10 @@ Backend holds one opaque blob (`notes.json`); the client owns pull → merge →
 
 ### D3. Launch adapters: WebDAV + S3
 
-| Adapter | Concurrency mechanism | Notes |
-|---|---|---|
+| Adapter        | Concurrency mechanism                                                                                                                                                                 | Notes                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | WebDAV (first) | HEAD-compare precheck before conditional PUT (dufs ignores `If-Match` on writes — verified v0.46.0); `If-Match` still forwarded for servers that honor it; `If-None-Match`/304 on GET | dufs ≥ 0.42.0 as reference server; Nextcloud `If-Match` to verify empirically |
-| S3 | conditional PUT (`If-Match`) where supported (AWS, R2); **HEAD-compare fallback** where not (B2, older MinIO-likes) | SigV4 via `aws4fetch`; path-style toggle for self-hosted endpoints |
+| S3             | conditional PUT (`If-Match`) where supported (AWS, R2); **HEAD-compare fallback** where not (B2, older MinIO-likes)                                                                   | SigV4 via `aws4fetch`; path-style toggle for self-hosted endpoints            |
 
 Adapter contract (the only surface the sync engine sees):
 
@@ -84,8 +84,8 @@ interface SyncAdapter {
   probe(): Promise<void>; // auth + reachability, throws typed errors
   get(opts?: { ifNoneMatch?: string }): Promise<
     | { kind: 'found'; data: Uint8Array; etag: string }
-    | { kind: 'not-found' }      // no remote blob yet
-    | { kind: 'not-modified' }   // 304 to the conditional GET
+    | { kind: 'not-found' } // no remote blob yet
+    | { kind: 'not-modified' } // 304 to the conditional GET
   >;
   put(data: Uint8Array, opts?: { ifMatch?: string; ifNoneMatch?: '*' }): Promise<{ etag: string }>;
 }
@@ -103,28 +103,28 @@ Encryption wraps any adapter (adapter sees opaque bytes) — one wrapper, not pe
 
 ```ts
 interface NoteRecord {
-  handle: string;        // display case, no "@"
-  handleLower: string;   // storage key
+  handle: string; // display case, no "@"
+  handleLower: string; // storage key
   text: string;
-  color: string | null;  // palette key; hex lives in CSS only
-  createdAt: number;     // epoch ms
-  updatedAt: number;     // epoch ms — LWW clock
+  color: string | null; // palette key; hex lives in CSS only
+  createdAt: number; // epoch ms
+  updatedAt: number; // epoch ms — LWW clock
 }
 interface StoreV2 {
   schemaVersion: 2;
-  notes: Record<string, NoteRecord>;       // key = handleLower
-  tombstones: Record<string, number>;      // handleLower -> deletedAt epoch ms
+  notes: Record<string, NoteRecord>; // key = handleLower
+  tombstones: Record<string, number>; // handleLower -> deletedAt epoch ms
 }
 ```
 
 Storage keys (all `browser.storage.local`):
 
-| Key | Content | Synced? |
-|---|---|---|
-| `xnotes:store` | `StoreV2` | yes (this is the blob) |
-| `xnotes:sync-state` | `{ deviceId, lastSyncAt, lastRemoteEtag, status, lastError }` | never |
-| `xnotes:settings` | backend type/endpoint/credentials/interval/encryption-on | never |
-| `xnotes:view` | manager page view preference | never |
+| Key                 | Content                                                       | Synced?                |
+| ------------------- | ------------------------------------------------------------- | ---------------------- |
+| `xnotes:store`      | `StoreV2`                                                     | yes (this is the blob) |
+| `xnotes:sync-state` | `{ deviceId, lastSyncAt, lastRemoteEtag, status, lastError }` | never                  |
+| `xnotes:settings`   | backend type/endpoint/credentials/interval/encryption-on      | never                  |
+| `xnotes:view`       | manager page view preference                                  | never                  |
 
 Tombstones GC'd after 90 days (see D6 caveat). Deletes write tombstones; upsert with whitespace-only text = delete (reference behavior, kept).
 
@@ -148,7 +148,7 @@ merge(local: StoreV2, remote: StoreV2) -> StoreV2
   tombstones older than 90 days are dropped (GC)
 ```
 
-Refinement over the plan doc: "remote wins on tie" is *not* commutative as a pure function (winner would depend on argument position); a canonical-serialization tie-break keeps `merge(a,b) === merge(b,a)` testable and convergence is unchanged (both devices compute the same winner for the same candidate pair). Ties at ms precision across devices are near-impossible in practice; the rule exists for correctness and testability.
+Refinement over the plan doc: "remote wins on tie" is _not_ commutative as a pure function (winner would depend on argument position); a canonical-serialization tie-break keeps `merge(a,b) === merge(b,a)` testable and convergence is unchanged (both devices compute the same winner for the same candidate pair). Ties at ms precision across devices are near-impossible in practice; the rule exists for correctness and testability.
 
 Properties (all unit-tested): commutative, associative enough for pairwise cycles, idempotent (`merge(x,x)=x`), deletion-safe (a tombstone always beats an older note), lossless (no candidate silently dropped).
 
@@ -176,8 +176,15 @@ Properties (all unit-tested): commutative, associative enough for pairwise cycle
 Envelope (the blob stored on the backend when encryption is on):
 
 ```json
-{ "v": 1, "cipher": "aes-256-gcm", "kdf": "pbkdf2-sha256", "iter": 600000,
-  "salt": "<b64 16B>", "iv": "<b64 12B>", "data": "<b64 ciphertext>" }
+{
+  "v": 1,
+  "cipher": "aes-256-gcm",
+  "kdf": "pbkdf2-sha256",
+  "iter": 600000,
+  "salt": "<b64 16B>",
+  "iv": "<b64 12B>",
+  "data": "<b64 ciphertext>"
+}
 ```
 
 WebCrypto only (`crypto.subtle`, available in both engines' background contexts): PBKDF2-SHA-256 → AES-256-GCM; fresh random salt+IV per encryption; passphrase never persisted. Wrong passphrase → GCM auth-tag failure → typed "decryption failed (wrong passphrase?)" error, local data untouched. Corrupt/unknown envelope → typed error, no overwrite of local store. Changing the passphrase re-encrypts and pushes on next sync. Plaintext `StoreV2` remains the in-memory/local format — encryption is strictly a transport wrapper.
@@ -198,7 +205,7 @@ WebCrypto only (`crypto.subtle`, available in both engines' background contexts)
 - Background written to service-worker constraints (strictest): all state in storage, listeners registered synchronously at top level, `alarms` instead of `setInterval`, no DOM assumptions → runs fine as Firefox event page.
 - Manifest: `permissions: ["storage", "alarms"]`; `host_permissions: ["https://x.com/*", "https://twitter.com/*"]`; `optional_host_permissions: ["*://*/*"]` (sync endpoints are arbitrary user origins, granted at runtime via `permissions.request` when sync settings are saved — must be inside a user gesture on both engines).
 - Firefox: `browser_specific_settings.gecko.id` + `strict_min_version` ≥ 121; distribution requires AMO signing (sources zip from `wxt zip -b firefox` + build README per AMO policy).
-- Host permissions on **both** engines: Chrome MV3 also withholds `host_permissions` by default (user-controlled site access since Chrome 121), and Firefox MV3 makes them opt-in/revocable → onboarding must check `permissions.contains` for the x.com/twitter.com origins and prompt via `permissions.request` on both engines, not just Firefox.
+- Host permissions on **both** engines: Chrome MV3 requests x.com/twitter.com host permissions at install time, but users can restrict site access to "on click" or revoke it (user-controlled site access since Chrome 121); Firefox MV3 makes them opt-in/revocable → onboarding must check `permissions.contains` for the x.com/twitter.com origins and prompt via `permissions.request` on both engines, not just Firefox.
 - Chromium: same build loads on Brave/Helium/Edge/Vivaldi via CWS.
 
 ### D11. Project layout
@@ -248,21 +255,21 @@ One pinned Node image everywhere (`node:22-bookworm-slim`); a named volume cache
 
 ## Risks / Trade-offs
 
-| Risk | Mitigation |
-|---|---|
-| X markup changes break panel injection | `data-testid` anchoring + fail-soft; all-notes page always works regardless |
-| MV3 service worker killed mid-sync | alarms-driven resumable cycles, mutex, ETag/If-Match makes retries safe, merge idempotent |
-| Clock skew breaks LWW | single-user few-devices → low risk; documented upgrade path: hybrid `(wallClock, perDeviceCounter)` without wire-format break |
-| Tombstone GC + device offline > 90 days resurrects a deleted note | documented limitation; watermark upgrade path noted (D6) |
-| B2/S3-without-conditional-writes HEAD→PUT race | single-user scale; worst case one extra merge cycle, lossless; documented |
-| Test S3 mock (adobe/s3mock) also ignores `If-Match` on PUT — same class as B2 | integration suite exercises the HEAD-compare fallback against it; the 412 mapping is unit-tested |
-| Nextcloud `If-Match` undocumented | empirical verification task in Phase 3; dufs is the supported reference server; adapter degrades to HEAD-fallback on 501/ignored preconditions |
-| Firefox users never grant host permissions | onboarding check + `permissions.request` prompt; manager page usable regardless |
-| Credentials readable in `storage.local` (not encrypted at rest) | honest docs; scoped credentials (single-bucket B2 app key, dedicated WebDAV user); encryption of the blob itself is independent of this |
-| `aws4fetch` dormant | frozen spec, tiny surface; hand-rolled SigV4 with official test vectors is the documented fallback |
-| MinIO-style servers unmaintained/buggy (MinIO archived 2026-04) | don't recommend MinIO; test against dufs + S3 mock; R2/AWS/B2 are the named real targets |
-| AMO review friction | sources zip + build README per AMO policy; deterministic WXT builds |
-| WXT pre-1.0 API drift | pin exact version; verify APIs against Context7 docs at Phase 0 before writing code |
+| Risk                                                                          | Mitigation                                                                                                                                     |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| X markup changes break panel injection                                        | `data-testid` anchoring + fail-soft; all-notes page always works regardless                                                                    |
+| MV3 service worker killed mid-sync                                            | alarms-driven resumable cycles, mutex, ETag/If-Match makes retries safe, merge idempotent                                                      |
+| Clock skew breaks LWW                                                         | single-user few-devices → low risk; documented upgrade path: hybrid `(wallClock, perDeviceCounter)` without wire-format break                  |
+| Tombstone GC + device offline > 90 days resurrects a deleted note             | documented limitation; watermark upgrade path noted (D6)                                                                                       |
+| B2/S3-without-conditional-writes HEAD→PUT race                                | single-user scale; worst case one extra merge cycle, lossless; documented                                                                      |
+| Test S3 mock (adobe/s3mock) also ignores `If-Match` on PUT — same class as B2 | integration suite exercises the HEAD-compare fallback against it; the 412 mapping is unit-tested                                               |
+| Nextcloud `If-Match` undocumented                                             | empirical verification task in Phase 3; dufs is the supported reference server; adapter degrades to HEAD-fallback on 501/ignored preconditions |
+| Firefox users never grant host permissions                                    | onboarding check + `permissions.request` prompt; manager page usable regardless                                                                |
+| Credentials readable in `storage.local` (not encrypted at rest)               | honest docs; scoped credentials (single-bucket B2 app key, dedicated WebDAV user); encryption of the blob itself is independent of this        |
+| `aws4fetch` dormant                                                           | frozen spec, tiny surface; hand-rolled SigV4 with official test vectors is the documented fallback                                             |
+| MinIO-style servers unmaintained/buggy (MinIO archived 2026-04)               | don't recommend MinIO; test against dufs + S3 mock; R2/AWS/B2 are the named real targets                                                       |
+| AMO review friction                                                           | sources zip + build README per AMO policy; deterministic WXT builds                                                                            |
+| WXT pre-1.0 API drift                                                         | pin exact version; verify APIs against Context7 docs at Phase 0 before writing code                                                            |
 
 ## Migration Plan
 
@@ -275,6 +282,6 @@ Rollback: extension is client-only; "rollback" = shipping the previous store zip
 
 ## Open Questions
 
-1. Nextcloud `If-Match` behavior — resolve empirically in Phase 3 (task exists); outcome only changes docs/recommendations, not architecture.
+1. Nextcloud `If-Match` behavior — pending empirical verification in Phase 3 (task 9.4); outcome only changes docs/recommendations, not architecture. dufs `If-Match` on PUT was verified as ignored (v0.46.0) — HEAD comparison is the real guard.
 2. Popup vs. options as the home of sync settings UI — default: settings live in options page, popup shows status + "Sync now" + link. Revisit only if UX testing says otherwise.
 3. Whether to ship the demo page in store builds — default: exclude (`demo/` is dev-only, not an entrypoint).

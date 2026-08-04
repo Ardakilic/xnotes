@@ -104,6 +104,29 @@ describe('toStoreV2', () => {
     expect(toStoreV2({ schemaVersion: 2 })).toBeNull();
     expect(toStoreV2({ schemaVersion: 2, notes: 'nope' })).toBeNull();
   });
+
+  it('canonicalizes tombstone keys (lowercase, stripped @) and keeps the greatest timestamp', () => {
+    const store = toStoreV2({
+      schemaVersion: 2,
+      notes: {},
+      tombstones: {
+        '@Jack': 100,
+        jack: 200,
+        JACK: 150,
+        '  bob ': 300,
+      },
+    });
+    expect(store?.tombstones).toEqual({ jack: 200, bob: 300 });
+  });
+
+  it('preserves __proto__ as a regular key via null-prototype maps', () => {
+    const raw = JSON.parse(
+      '{"schemaVersion":2,"notes":{"__proto__":{"handle":"__proto__","text":"hi","createdAt":1,"updatedAt":2}},"tombstones":{}}',
+    );
+    const store = toStoreV2(raw);
+    expect(store?.notes['__proto__']?.text).toBe('hi');
+    expect(Object.getPrototypeOf(store?.notes)).toBeNull();
+  });
 });
 
 describe('store round-trip', () => {
@@ -189,6 +212,13 @@ describe('upsert semantics', () => {
     expect(store.tombstones['jack']).toBe(200);
   });
 
+  it('writes a tombstone on whitespace-only text even when no local note exists', async () => {
+    await upsertNote('jack', '   ', null, 200);
+    const store = await getStore();
+    expect(store.notes['jack']).toBeUndefined();
+    expect(store.tombstones['jack']).toBe(200);
+  });
+
   it('clears the tombstone when a note is re-added', async () => {
     await upsertNote('jack', 'hello', null, 100);
     await deleteNote('jack', 200);
@@ -256,6 +286,30 @@ describe('stale extension context', () => {
     } finally {
       fakeBrowser.runtime.id = 'test-extension-id';
     }
+  });
+});
+
+describe('rejected storage reads', () => {
+  it('upsertNote aborts without saving when the store read fails', async () => {
+    await upsertNote('jack', 'original', null, 100);
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'get').mockImplementation(() => {
+      throw new Error('storage read failed');
+    });
+    await expect(upsertNote('jack', 'changed', null, 200)).resolves.toBeUndefined();
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['jack']?.text).toBe('original');
+  });
+
+  it('deleteNote aborts without saving when the store read fails', async () => {
+    await upsertNote('jack', 'original', null, 100);
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'get').mockImplementation(() => {
+      throw new Error('storage read failed');
+    });
+    await expect(deleteNote('jack')).resolves.toBeUndefined();
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['jack']?.text).toBe('original');
   });
 });
 

@@ -33,6 +33,8 @@ export function createPanel(handle: string, hooks: PanelHooks): Panel {
 
   let mode: Mode = 'empty';
   let disposed = false;
+  let revision = 0;
+  let mutationInFlight = false;
 
   function clearAccent(): void {
     for (const key of COLOR_KEYS) root.classList.remove(`xn-accent-${key}`);
@@ -57,6 +59,14 @@ export function createPanel(handle: string, hooks: PanelHooks): Panel {
     el.textContent = label;
     el.addEventListener('click', onClick);
     return el;
+  }
+
+  function setMutationControlsEnabled(enabled: boolean): void {
+    root
+      .querySelectorAll<HTMLButtonElement>('button.xn-save, button.xn-cancel, button.xn-delete')
+      .forEach((b) => {
+        b.disabled = !enabled;
+      });
   }
 
   function renderEmpty(): void {
@@ -125,23 +135,34 @@ export function createPanel(handle: string, hooks: PanelHooks): Panel {
     updateSwatches();
 
     async function doSave(): Promise<void> {
+      if (mutationInFlight || disposed) return;
       const text = editor.value;
       const color = selected;
-      await hooks.save(text, color);
-      if (disposed) return;
-      if (text.trim() === '') {
-        renderEmpty();
-        return;
+      mutationInFlight = true;
+      setMutationControlsEnabled(false);
+      try {
+        await hooks.save(text, color);
+        if (disposed) return;
+        revision++;
+        if (text.trim() === '') {
+          renderEmpty();
+          return;
+        }
+        const now = Date.now();
+        renderView({
+          handle,
+          handleLower: handle.toLowerCase(),
+          text,
+          color,
+          createdAt: note === null ? now : note.createdAt,
+          updatedAt: now,
+        });
+      } catch {
+        if (!disposed) renderEdit(note);
+      } finally {
+        mutationInFlight = false;
+        if (!disposed) setMutationControlsEnabled(true);
       }
-      const now = Date.now();
-      renderView({
-        handle,
-        handleLower: handle.toLowerCase(),
-        text,
-        color,
-        createdAt: note === null ? now : note.createdAt,
-        updatedAt: now,
-      });
     }
 
     editor.addEventListener('keydown', (event) => {
@@ -155,6 +176,7 @@ export function createPanel(handle: string, hooks: PanelHooks): Panel {
     actions.append(
       button('Save', 'xn-save', () => void doSave()),
       button('Cancel', 'xn-cancel', () => {
+        if (mutationInFlight) return;
         if (note === null) renderEmpty();
         else renderView(note);
       }),
@@ -162,9 +184,22 @@ export function createPanel(handle: string, hooks: PanelHooks): Panel {
     if (note !== null) {
       actions.append(
         button('Delete', 'xn-delete', () => {
-          void hooks.remove().then(() => {
-            if (!disposed) renderEmpty();
-          });
+          if (mutationInFlight || disposed) return;
+          void (async () => {
+            mutationInFlight = true;
+            setMutationControlsEnabled(false);
+            try {
+              await hooks.remove();
+              if (disposed) return;
+              revision++;
+              renderEmpty();
+            } catch {
+              if (!disposed) renderView(note);
+            } finally {
+              mutationInFlight = false;
+              if (!disposed) setMutationControlsEnabled(true);
+            }
+          })();
         }),
       );
     }
@@ -174,13 +209,15 @@ export function createPanel(handle: string, hooks: PanelHooks): Panel {
 
   function refresh(note: NoteRecord | null): void {
     if (disposed || mode === 'edit') return;
+    revision++;
     if (note === null) renderEmpty();
     else renderView(note);
   }
 
   renderEmpty();
+  const loadRevision = revision;
   void hooks.loadNote().then((note) => {
-    if (disposed || mode === 'edit') return;
+    if (disposed || mode === 'edit' || revision !== loadRevision) return;
     if (note === null) renderEmpty();
     else renderView(note);
   });

@@ -16,7 +16,8 @@ export class WebdavAdapter implements SyncAdapter {
 
   constructor(settings: WebdavSettings) {
     const base = settings.endpoint.replace(/\/+$/, '');
-    const path = settings.path === '' ? DEFAULT_PATH : settings.path;
+    let path = settings.path === '' ? DEFAULT_PATH : settings.path;
+    if (!path.startsWith('/')) path = `/${path}`;
     this.blobUrl = base + path;
     this.folderUrl = base + path.slice(0, path.lastIndexOf('/'));
     // ponytail: UTF-8 per RFC 7617, not raw btoa (which throws on non-Latin1)

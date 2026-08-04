@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getStore, saveStore, upsertNote } from '../../src/core/storage';
+import { getStore, saveStore, toStoreV2, upsertNote } from '../../src/core/storage';
 import type { ColorKey } from '../../src/core/colors';
 import type { NoteRecord, StoreV2 } from '../../src/core/types';
 import { buildExport, chooseImportAction, mountManager } from './manager';
@@ -215,7 +215,8 @@ describe('export', () => {
     const store = storeWith([makeNote('jack', 'hello', 'teal', 100)]);
     const { filename, json } = buildExport(store);
     expect(filename).toMatch(/^xnotes-backup-\d{8}\.json$/);
-    expect(JSON.parse(json) as unknown).toEqual(store);
+    const parsed = JSON.parse(json);
+    expect(toStoreV2(parsed)).toEqual(store);
   });
 });
 

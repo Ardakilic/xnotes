@@ -37,11 +37,10 @@ describe('decorateAvatars', () => {
     decorateAvatars(document, notes, null);
     decorateAvatars(document, notes, null);
     const jack = document.querySelector('[data-testid="UserAvatar-Container-jack"]');
-    expect(jack?.querySelectorAll('.xn-badge').length).toBe(1);
-    expect(jack?.querySelector('.xn-badge')?.className).toBe('xn-badge xn-accent-teal');
-    expect(document.querySelectorAll('.xn-badge').length).toBe(2);
+    expect(jack?.querySelectorAll('span[data-xn-shadow]').length).toBe(1);
+    expect(document.querySelectorAll('span[data-xn-shadow]').length).toBe(2);
     expect(
-      document.querySelector('[data-testid="UserAvatar-Container-nonote"] .xn-badge'),
+      document.querySelector('[data-testid="UserAvatar-Container-nonote"] span[data-xn-shadow]'),
     ).toBeNull();
   });
 
@@ -49,27 +48,30 @@ describe('decorateAvatars', () => {
     const notes = { jack: makeNote('jack', 'teal') };
     decorateAvatars(document, notes, null);
     expect(
-      document.querySelector('[data-testid="UserAvatar-Container-jack"] .xn-badge'),
+      document.querySelector('[data-testid="UserAvatar-Container-jack"] span[data-xn-shadow]'),
     ).not.toBeNull();
     decorateAvatars(document, notes, 'jack');
     expect(
-      document.querySelector('[data-testid="UserAvatar-Container-jack"] .xn-badge'),
+      document.querySelector('[data-testid="UserAvatar-Container-jack"] span[data-xn-shadow]'),
     ).toBeNull();
   });
 
   it('removes stale badges when notes disappear', () => {
     decorateAvatars(document, { jack: makeNote('jack', 'red') }, null);
-    expect(document.querySelectorAll('.xn-badge').length).toBe(1);
+    expect(document.querySelectorAll('span[data-xn-shadow]').length).toBe(1);
     decorateAvatars(document, {}, null);
-    expect(document.querySelectorAll('.xn-badge').length).toBe(0);
+    expect(document.querySelectorAll('span[data-xn-shadow]').length).toBe(0);
   });
 
-  it('updates the badge class when the note color changes', () => {
-    decorateAvatars(document, { jack: makeNote('jack', 'red') }, null);
-    decorateAvatars(document, { jack: makeNote('jack', 'blue') }, null);
+  it('does not expose note text or color in the light DOM', () => {
+    decorateAvatars(document, { jack: makeNote('jack', 'teal', 'secret text') }, null);
     const jack = document.querySelector('[data-testid="UserAvatar-Container-jack"]');
-    expect(jack?.querySelectorAll('.xn-badge').length).toBe(1);
-    expect(jack?.querySelector('.xn-badge')?.className).toBe('xn-badge xn-accent-blue');
+    const host = jack?.querySelector('span[data-xn-shadow]');
+    expect(host).not.toBeNull();
+    expect(host?.getAttribute('class')).toBeNull();
+    expect(host?.textContent).toBe('');
+    expect(jack?.textContent).not.toContain('secret text');
+    expect(jack?.textContent).not.toContain('teal');
   });
 });
 
@@ -80,21 +82,29 @@ describe('injectHoverCardNote', () => {
     const notes = { jack: makeNote('jack', null, 'multi\nline') };
     injectHoverCardNote(document, notes);
     injectHoverCardNote(document, notes);
-    const injected = document.querySelectorAll('.xn-hover-note');
-    expect(injected.length).toBe(1);
-    expect(injected.item(0)?.textContent).toBe('multi\nline');
+    const hosts = document.querySelectorAll('div[data-xn-hover]');
+    expect(hosts.length).toBe(1);
+    expect(hosts.item(0)?.textContent).toBe('');
+  });
+
+  it('does not expose note text in the light DOM', () => {
+    document.body.innerHTML =
+      '<div data-testid="HoverCard"><a href="https://x.com/jack">Jack</a></div>';
+    injectHoverCardNote(document, { jack: makeNote('jack', null, 'secret note') });
+    const card = document.querySelector('[data-testid="HoverCard"]');
+    expect(card?.textContent).not.toContain('secret note');
   });
 
   it('resolves relative profile links against the document base', () => {
     document.body.innerHTML = '<div data-testid="HoverCard"><a href="/jack">Jack</a></div>';
     injectHoverCardNote(document, { jack: makeNote('jack', null) });
-    expect(document.querySelectorAll('.xn-hover-note').length).toBe(1);
+    expect(document.querySelectorAll('div[data-xn-hover]').length).toBe(1);
   });
 
   it('skips hover cards without a noted profile link', () => {
     document.body.innerHTML =
       '<div data-testid="HoverCard"><a href="https://x.com/home">Home</a></div>';
     injectHoverCardNote(document, { jack: makeNote('jack', null) });
-    expect(document.querySelectorAll('.xn-hover-note').length).toBe(0);
+    expect(document.querySelectorAll('div[data-xn-hover]').length).toBe(0);
   });
 });

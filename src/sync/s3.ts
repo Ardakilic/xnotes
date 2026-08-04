@@ -87,10 +87,16 @@ export class S3Adapter implements SyncAdapter {
   private async putWithHeadCompare(data: Uint8Array, opts?: PutOptions): Promise<{ etag: string }> {
     const head = await this.send(() => this.client.fetch(this.objectUrl, { method: 'HEAD' }));
     if (head.status === 403) throw new SyncAuthError('S3 authentication failed');
-    if (head.ok && opts?.ifMatch) {
-      const remote = stripQuotes(head.headers.get('etag') ?? '');
-      if (remote !== stripQuotes(opts.ifMatch)) {
-        throw new SyncConflictError('remote blob changed since last sync');
+    if (opts?.ifNoneMatch === '*') {
+      if (head.ok) throw new SyncConflictError('remote blob already exists');
+    } else if (opts?.ifMatch) {
+      if (head.status === 404)
+        throw new SyncConflictError('remote blob disappeared since last sync');
+      if (head.ok) {
+        const remote = stripQuotes(head.headers.get('etag') ?? '');
+        if (remote !== stripQuotes(opts.ifMatch)) {
+          throw new SyncConflictError('remote blob changed since last sync');
+        }
       }
     }
     // ponytail: copy so TS sees an ArrayBuffer-backed view for BodyInit

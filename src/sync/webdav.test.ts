@@ -218,4 +218,14 @@ describe('url construction', () => {
     expect(call(0).url).toBe('https://dav.example.com/xnotes/notes.json');
     expect(call(1).url).toBe('https://dav.example.com/xnotes/notes.json');
   });
+
+  it('normalizes a path without a leading slash', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
+    const adapter = new WebdavAdapter({
+      ...settings,
+      path: 'my-notes/notes.json',
+    });
+    await adapter.get();
+    expect(call(0).url).toBe('https://dav.example.com/my-notes/notes.json');
+  });
 });

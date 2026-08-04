@@ -13,6 +13,7 @@ const settings = document.querySelector<HTMLDivElement>('#settings-panel');
 if (settings !== null) mountSettings(settings);
 
 if (location.hash !== '') {
-  const target = document.querySelector(location.hash);
+  const id = location.hash.slice(1);
+  const target = document.getElementById(id);
   if (target !== null) target.scrollIntoView();
 }

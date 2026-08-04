@@ -24,7 +24,8 @@ function need<T extends Element>(el: T | null): T {
 }
 
 async function flush(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 async function panelInEditMode(note: NoteRecord | null) {

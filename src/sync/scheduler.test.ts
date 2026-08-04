@@ -165,9 +165,9 @@ describe('pull / push / no-op', () => {
     await runCycle();
     expect(fake.puts).toHaveLength(1);
     expect(fake.puts[0]!.opts).toEqual({ ifMatch: 'e0' });
-    const pushed = JSON.parse(new TextDecoder().decode(fake.puts[0]!.bytes)) as StoreV2;
-    expect(pushed.notes['jack']).toBeDefined();
-    expect(pushed.notes['remoteuser']).toBeDefined();
+    const pushed = toStoreV2(JSON.parse(new TextDecoder().decode(fake.puts[0]!.bytes)));
+    expect(pushed?.notes['jack']).toBeDefined();
+    expect(pushed?.notes['remoteuser']).toBeDefined();
   });
 
   it('does nothing when both sides already agree', async () => {
@@ -188,8 +188,8 @@ describe('pull / push / no-op', () => {
     await runCycle();
     expect(fake.gets).toBe(2);
     expect(fake.puts).toHaveLength(2);
-    const pushed = JSON.parse(new TextDecoder().decode(fake.puts[1]!.bytes)) as StoreV2;
-    expect(pushed.notes['jack']?.text).toBe('v2');
+    const pushed = toStoreV2(JSON.parse(new TextDecoder().decode(fake.puts[1]!.bytes)));
+    expect(pushed?.notes['jack']?.text).toBe('v2');
   });
 });
 
@@ -202,7 +202,6 @@ describe('conflict retry', () => {
     await runCycle();
     const state = await getSyncState();
     expect(state.status).toBe('idle');
-    // one successful PUT — the failed attempt is retried, not counted
     expect(fake.puts).toHaveLength(1);
     const store = await getStore();
     expect(store.notes['jack']).toBeDefined();
@@ -234,6 +233,23 @@ describe('single-flight', () => {
     await settle();
     expect(fake.gets).toBe(2);
     expect(fake.maxConcurrent).toBe(1);
+  });
+});
+
+describe('concurrent local edits during sync', () => {
+  it('preserves a local edit made while adapter.get is pending', async () => {
+    await saveSettings(settingsOf({}));
+    await upsertNote('jack', 'v1', null, 9000);
+    fake.remote = { bytes: storeBytes(note('remoteuser', 5000)), etag: 'e0' };
+    fake.slowGets = 1;
+    const cyclePromise = runCycle();
+    await upsertNote('concurrent', 'edit during get', null, 10_000);
+    await cyclePromise;
+    await settle();
+    const store = await getStore();
+    expect(store.notes['concurrent']?.text).toBe('edit during get');
+    expect(store.notes['jack']).toBeDefined();
+    expect(store.notes['remoteuser']).toBeDefined();
   });
 });
 

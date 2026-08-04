@@ -68,7 +68,7 @@ xNotes syncs one opaque blob (`notes.json`) with optimistic concurrency; the cli
 dufs -a 'myuser:mypassword@/:rw' --allow-all -p 5244 ~/xnotes-dav
 ```
 
-Enter the endpoint (`http://LAN-IP:5244` works; you will see an explicit unencrypted-connection warning for non-TLS), username, and password. The folder is created on first sync. Use **Test connection** before saving.
+Enter the endpoint (HTTPS required — HTTP endpoints are rejected because credentials and notes would travel in plain text; reverse-proxy your LAN dufs with TLS), username, and password. The folder is created on first sync. Use **Test connection** before saving.
 
 ### S3-compatible
 
@@ -126,13 +126,13 @@ demo/          standalone Vite page (storage shim over localStorage) for UI iter
 
 ## Backend compatibility
 
-| Backend | Status | Mechanism |
-|---|---|---|
-| dufs ≥ 0.42.0 | ✅ integration-tested | ETag/`If-None-Match` on GET; HEAD-compare precheck guards writes (dufs ignores `If-Match` on PUT — verified empirically against v0.46.0; PUT responses also carry no ETag, so the adapter fetches it via HEAD) |
-| Nextcloud | ⏳ pending empirical check | ETags exposed; `If-Match` on PUT undocumented — see `MANUAL_TESTING.md` |
-| Cloudflare R2 | ⏳ pending manual smoke | conditional writes supported natively |
-| Backblaze B2 | ⏳ pending manual smoke | no documented conditional writes → HEAD-compare fallback (set "provider lacks conditional writes") |
-| adobe/s3mock | ✅ integration test fixture | ignores `If-Match` on PUT like B2 — exercises the fallback path |
+| Backend       | Status                      | Mechanism                                                                                                                                                                                                      |
+| ------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| dufs ≥ 0.42.0 | ✅ integration-tested       | ETag/`If-None-Match` on GET; HEAD-compare precheck guards writes (dufs ignores `If-Match` on PUT — verified empirically against v0.46.0; PUT responses also carry no ETag, so the adapter fetches it via HEAD) |
+| Nextcloud     | ⏳ pending empirical check  | ETags exposed; `If-Match` on PUT undocumented — see `MANUAL_TESTING.md`                                                                                                                                        |
+| Cloudflare R2 | ⏳ pending manual smoke     | conditional writes supported natively                                                                                                                                                                          |
+| Backblaze B2  | ⏳ pending manual smoke     | no documented conditional writes → HEAD-compare fallback (set "provider lacks conditional writes")                                                                                                             |
+| adobe/s3mock  | ✅ integration test fixture | ignores `If-Match` on PUT like B2 — exercises the fallback path                                                                                                                                                |
 
 ## Testing
 
@@ -145,16 +145,16 @@ make integration   # dufs + s3mock round-trips, conflicts, encrypted blob opacit
 
 ### Test map (spec requirement → suite)
 
-| Spec "Mandatory automated tests" requirement | Suite(s) |
-|---|---|
-| notes-storage | `src/core/storage.test.ts`, `src/core/import-export.test.ts` |
-| profile-notes-ui | `src/core/profile.test.ts`, `src/ui/nav.test.ts`, `src/ui/panel.test.ts`, `src/ui/badges.test.ts`, `src/core/theme.test.ts` |
-| notes-manager | `src/core/filters.test.ts`, `entrypoints/options/manager.test.ts`, `entrypoints/options/settings.test.ts` |
-| sync-engine (merge) | `src/sync/merge.test.ts` |
-| sync-engine (scheduler) | `src/sync/scheduler.test.ts` |
-| sync-backends | `src/sync/webdav.test.ts`, `src/sync/s3.test.ts`, `src/sync/sigv4.test.ts`, `src/sync/settings.test.ts` |
-| note-encryption | `src/sync/crypto.test.ts` |
-| Dockerized workflow | `Makefile` targets + `.github/workflows/ci.yml` (CI parity), integration: `tests/integration/*.test.ts` via `docker/compose.integration.yml` |
+| Spec "Mandatory automated tests" requirement | Suite(s)                                                                                                                                     |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| notes-storage                                | `src/core/storage.test.ts`, `src/core/import-export.test.ts`                                                                                 |
+| profile-notes-ui                             | `src/core/profile.test.ts`, `src/ui/nav.test.ts`, `src/ui/panel.test.ts`, `src/ui/badges.test.ts`, `src/core/theme.test.ts`                  |
+| notes-manager                                | `src/core/filters.test.ts`, `entrypoints/options/manager.test.ts`, `entrypoints/options/settings.test.ts`                                    |
+| sync-engine (merge)                          | `src/sync/merge.test.ts`                                                                                                                     |
+| sync-engine (scheduler)                      | `src/sync/scheduler.test.ts`                                                                                                                 |
+| sync-backends                                | `src/sync/webdav.test.ts`, `src/sync/s3.test.ts`, `src/sync/sigv4.test.ts`, `src/sync/settings.test.ts`                                      |
+| note-encryption                              | `src/sync/crypto.test.ts`                                                                                                                    |
+| Dockerized workflow                          | `Makefile` targets + `.github/workflows/ci.yml` (CI parity), integration: `tests/integration/*.test.ts` via `docker/compose.integration.yml` |
 
 Everything not unit-testable (real-browser behavior, service-worker torture, multi-device matrix) is tracked in [MANUAL_TESTING.md](MANUAL_TESTING.md).
 

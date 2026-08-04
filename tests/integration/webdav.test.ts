@@ -98,12 +98,10 @@ describe('WebDAV adapter against real dufs', () => {
     const first = await deviceA.put(encode(store('devicea', 10_000)), { ifNoneMatch: '*' });
     expect(first.etag).not.toBe('');
 
-    // Device B still believes the blob is absent; its optimistic write must conflict.
     await expect(
       deviceB.put(encode(store('deviceb', 11_000)), { ifNoneMatch: '*' }),
     ).rejects.toBeInstanceOf(SyncConflictError);
 
-    // B recovers the way the sync engine does: re-GET, merge, PUT with the fresh etag.
     const remote = await deviceB.get();
     expect(remote.kind).toBe('found');
     if (remote.kind !== 'found') return;

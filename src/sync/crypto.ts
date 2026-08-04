@@ -2,6 +2,7 @@ import type { StoreV2 } from '../core/types';
 import { SyncDecodeError } from './adapter';
 
 export const MIN_PBKDF2_ITERATIONS = 600_000;
+export const MAX_PBKDF2_ITERATIONS = 10_000_000;
 
 interface Envelope {
   v: 1;
@@ -52,6 +53,8 @@ function parseEnvelope(parsed: unknown): Envelope {
   if (kdf !== 'pbkdf2-sha256') throw new SyncDecodeError(`unknown kdf: ${String(kdf)}`);
   if (
     typeof iter !== 'number' ||
+    !Number.isFinite(iter) ||
+    !Number.isInteger(iter) ||
     typeof salt !== 'string' ||
     typeof iv !== 'string' ||
     typeof data !== 'string'
@@ -60,6 +63,9 @@ function parseEnvelope(parsed: unknown): Envelope {
   }
   if (iter < MIN_PBKDF2_ITERATIONS) {
     throw new SyncDecodeError(`envelope kdf iterations below minimum (${MIN_PBKDF2_ITERATIONS})`);
+  }
+  if (iter > MAX_PBKDF2_ITERATIONS) {
+    throw new SyncDecodeError(`envelope kdf iterations above maximum (${MAX_PBKDF2_ITERATIONS})`);
   }
   return { v, cipher, kdf, iter, salt, iv, data };
 }
@@ -115,14 +121,20 @@ export async function decryptStore(bytes: Uint8Array, passphrase: string): Promi
     throw new SyncDecodeError('blob is not valid JSON');
   }
   const env = parseEnvelope(parsed);
-  const key = await deriveKey(passphrase, fromBase64(env.salt), env.iter);
+  let salt: Uint8Array<ArrayBuffer>;
+  let iv: Uint8Array<ArrayBuffer>;
+  let ciphertext: Uint8Array<ArrayBuffer>;
+  try {
+    salt = fromBase64(env.salt);
+    iv = fromBase64(env.iv);
+    ciphertext = fromBase64(env.data);
+  } catch {
+    throw new SyncDecodeError('envelope contains malformed base64');
+  }
+  const key = await deriveKey(passphrase, salt, env.iter);
   let plain: ArrayBuffer;
   try {
-    plain = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: fromBase64(env.iv) },
-      key,
-      fromBase64(env.data),
-    );
+    plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
   } catch {
     throw new SyncDecodeError('decryption failed (wrong passphrase?)');
   }

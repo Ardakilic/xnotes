@@ -9,6 +9,17 @@ export function extractHandleFromAvatarTestid(testid: string): string | null {
   return handle === '' ? null : handle;
 }
 
+const BADGE_STYLE = `
+.xn-badge {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-left: 2px;
+  pointer-events: none;
+}
+`;
+
 export function decorateAvatars(
   doc: Document,
   notes: Record<string, NoteRecord>,
@@ -20,17 +31,30 @@ export function decorateAvatars(
     const handle = extractHandleFromAvatarTestid(testid);
     const handleLower = handle === null ? null : handle.toLowerCase();
     const note = handleLower === null ? undefined : notes[handleLower];
-    const existing = container.querySelector('.xn-badge');
+    const existing = container.querySelector('span[data-xn-shadow]');
     if (handleLower === null || note === undefined || handleLower === currentHandleLower) {
       existing?.remove();
       return;
     }
-    const wanted = note.color === null ? 'xn-badge' : `xn-badge xn-accent-${note.color}`;
-    if (existing !== null && existing.className === wanted) return;
-    existing?.remove();
+    const colorClass = note.color === null ? '' : `xn-accent-${note.color}`;
+    if (existing !== null) {
+      const root = existing.shadowRoot;
+      if (root !== null) {
+        const badge = root.querySelector('.xn-badge');
+        if (badge !== null) badge.className = `xn-badge ${colorClass}`.trim();
+      }
+      return;
+    }
+    const host = doc.createElement('span');
+    host.setAttribute('data-xn-shadow', '');
+    host.style.cssText = 'display:inline-block;pointer-events:none;';
+    const root = host.attachShadow({ mode: 'closed' });
+    const style = doc.createElement('style');
+    style.textContent = BADGE_STYLE;
     const badge = doc.createElement('span');
-    badge.className = wanted;
-    container.append(badge);
+    badge.className = `xn-badge ${colorClass}`.trim();
+    root.append(style, badge);
+    container.append(host);
   });
 }
 
@@ -59,15 +83,29 @@ function findNotedLink(
   return null;
 }
 
+const HOVER_STYLE = `
+.xn-hover-note {
+  padding: 4px 8px;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+`;
+
 export function injectHoverCardNote(doc: Document, notes: Record<string, NoteRecord>): void {
   const cards = doc.querySelectorAll('[data-testid="HoverCard"]');
   cards.forEach((card) => {
-    if (card.querySelector('.xn-hover-note') !== null) return;
+    if (card.querySelector('div[data-xn-hover]') !== null) return;
     const note = findNotedLink(card, doc, notes);
     if (note === null) return;
+    const host = doc.createElement('div');
+    host.setAttribute('data-xn-hover', '');
+    const root = host.attachShadow({ mode: 'closed' });
+    const style = doc.createElement('style');
+    style.textContent = HOVER_STYLE;
     const div = doc.createElement('div');
     div.className = 'xn-hover-note';
     div.textContent = note.text;
-    card.append(div);
+    root.append(style, div);
+    card.append(host);
   });
 }

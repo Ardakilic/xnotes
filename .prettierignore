@@ -7,6 +7,5 @@ demo/dist/
 .claude/
 .opencode/
 .github/
-*.md
 LICENSE
 package-lock.json

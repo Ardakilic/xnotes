@@ -94,6 +94,7 @@ export default defineContentScript({
 
     async function decorateTick(): Promise<void> {
       if (stopped || !contextAlive()) return;
+      applyTheme();
       // ponytail: re-read storage every tick — cheap local read, no cache needed
       const store = await getStore();
       if (stopped) return;

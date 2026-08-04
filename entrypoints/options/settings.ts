@@ -12,6 +12,12 @@ export function endpointOrigin(endpoint: string): string | null {
   return url === null ? null : url.origin;
 }
 
+export function endpointPermissionPattern(endpoint: string): string | null {
+  const url = parseEndpointUrl(endpoint);
+  if (url === null) return null;
+  return `${url.protocol}//${url.hostname}/*`;
+}
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className: string = '',
@@ -37,9 +43,14 @@ export function mountSettings(root: HTMLElement): void {
   const errorSlots = new Map<string, HTMLElement>();
   let initialEncryptionEnabled = false;
 
-  function field(key: string, labelText: string, input: HTMLInputElement): HTMLElement {
+  function field(
+    backend: string,
+    key: string,
+    labelText: string,
+    input: HTMLInputElement,
+  ): HTMLElement {
     const slot = el('span', 'field-error');
-    errorSlots.set(key, slot);
+    errorSlots.set(`${backend}:${key}`, slot);
     return labeled(labelText, input, slot);
   }
 
@@ -69,10 +80,10 @@ export function mountSettings(root: HTMLElement): void {
   const webdavFields = el('fieldset', 'backend-fields');
   webdavFields.append(
     el('legend', undefined, 'WebDAV'),
-    field('endpoint', 'Endpoint', webdavEndpoint),
-    field('username', 'Username', webdavUsername),
-    field('password', 'Password', webdavPassword),
-    field('path', 'Blob path', webdavPath),
+    field('webdav', 'endpoint', 'Endpoint', webdavEndpoint),
+    field('webdav', 'username', 'Username', webdavUsername),
+    field('webdav', 'password', 'Password', webdavPassword),
+    field('webdav', 'path', 'Blob path', webdavPath),
   );
 
   const s3Endpoint = el('input');
@@ -97,12 +108,12 @@ export function mountSettings(root: HTMLElement): void {
   const s3Fields = el('fieldset', 'backend-fields');
   s3Fields.append(
     el('legend', undefined, 'S3'),
-    field('endpoint', 'Endpoint', s3Endpoint),
-    field('region', 'Region', s3Region),
-    field('bucket', 'Bucket', s3Bucket),
-    field('prefix', 'Key prefix', s3Prefix),
-    field('accessKey', 'Access key', s3AccessKey),
-    field('secretKey', 'Secret key', s3SecretKey),
+    field('s3', 'endpoint', 'Endpoint', s3Endpoint),
+    field('s3', 'region', 'Region', s3Region),
+    field('s3', 'bucket', 'Bucket', s3Bucket),
+    field('s3', 'prefix', 'Key prefix', s3Prefix),
+    field('s3', 'accessKey', 'Access key', s3AccessKey),
+    field('s3', 'secretKey', 'Secret key', s3SecretKey),
     labeled('Path-style URLs (self-hosted endpoints)', s3PathStyle, el('span', 'field-error')),
     labeled(
       'Provider lacks conditional writes (e.g. Backblaze B2)',
@@ -147,6 +158,28 @@ export function mountSettings(root: HTMLElement): void {
     messageArea,
   );
 
+  const allControls: Array<HTMLInputElement | HTMLSelectElement | HTMLButtonElement> = [
+    backendSelect,
+    webdavEndpoint,
+    webdavUsername,
+    webdavPassword,
+    webdavPath,
+    s3Endpoint,
+    s3Region,
+    s3Bucket,
+    s3Prefix,
+    s3AccessKey,
+    s3SecretKey,
+    s3PathStyle,
+    s3ForceHead,
+    intervalInput,
+    encryptionToggle,
+    passphraseInput,
+    testBtn,
+    saveBtn,
+  ];
+  allControls.forEach((c) => (c.disabled = true));
+
   function syncVisibility(): void {
     webdavFields.hidden = backendSelect.value !== 'webdav';
     s3Fields.hidden = backendSelect.value !== 's3';
@@ -188,10 +221,10 @@ export function mountSettings(root: HTMLElement): void {
     return Math.floor(parsed);
   }
 
-  function showValidation(result: ValidationResult): void {
+  function showValidation(result: ValidationResult, backend: string): void {
     for (const slot of errorSlots.values()) slot.textContent = '';
     for (const [key, message] of Object.entries(result.errors)) {
-      const slot = errorSlots.get(key);
+      const slot = errorSlots.get(`${backend}:${key}`);
       if (slot !== undefined) slot.textContent = message;
     }
   }
@@ -209,10 +242,10 @@ export function mountSettings(root: HTMLElement): void {
   }
 
   async function requestOriginPermission(endpoint: string): Promise<boolean> {
-    const origin = endpointOrigin(endpoint);
-    if (origin === null) return false;
+    const pattern = endpointPermissionPattern(endpoint);
+    if (pattern === null) return false;
     try {
-      return await browser.permissions.request({ origins: [`${origin}/*`] });
+      return await browser.permissions.request({ origins: [pattern] });
     } catch {
       return false;
     }
@@ -226,7 +259,7 @@ export function mountSettings(root: HTMLElement): void {
         return;
       }
       const validation = validateBackend(backend);
-      showValidation(validation);
+      showValidation(validation, backend.backend);
       if (!validation.ok) {
         showTestResult('Fix the highlighted fields first.', false);
         return;
@@ -258,7 +291,7 @@ export function mountSettings(root: HTMLElement): void {
       let warningText = '';
       if (backend !== null) {
         const validation = validateBackend(backend);
-        showValidation(validation);
+        showValidation(validation, backend.backend);
         if (!validation.ok) {
           showMessage('Save blocked — fix the highlighted fields.', 'error');
           return;
@@ -285,7 +318,6 @@ export function mountSettings(root: HTMLElement): void {
       // ponytail: also sent when switching to "none" so the background re-reads settings and stops scheduling
       await sendBackground({ type: 'backend-activated' });
       if (encryptionToggle.checked !== initialEncryptionEnabled || passphraseInput.value !== '') {
-        // plaintext hash unchanged but wire bytes differ — force the re-encrypt/decrypt push
         await sendBackground({ type: 'encryption-changed' });
       }
       passphraseInput.value = '';
@@ -322,5 +354,6 @@ export function mountSettings(root: HTMLElement): void {
     encryptionToggle.checked = settings.encryptionEnabled;
     initialEncryptionEnabled = settings.encryptionEnabled;
     syncVisibility();
+    allControls.forEach((c) => (c.disabled = false));
   })();
 }

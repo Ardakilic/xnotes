@@ -46,7 +46,7 @@ xNotes — a cross-browser MV3 extension (WXT + strict TypeScript, vanilla DOM) 
 
 ## Gotchas (learned the hard way — don't rediscover)
 
-- **dufs ignores `If-Match` on PUT** (verified v0.46.0; returns 201 for stale etags) and its **PUT responses carry no ETag**. `WebdavAdapter` therefore HEAD-compares before conditional PUTs and fetches the ETag via HEAD after PUT. `If-None-Match` on GET *does* work (304).
+- **dufs ignores `If-Match` on PUT** (verified v0.46.0; returns 201 for stale etags) and its **PUT responses carry no ETag**. `WebdavAdapter` therefore HEAD-compares before conditional PUTs and fetches the ETag via HEAD after PUT. `If-None-Match` on GET _does_ work (304).
 - **adobe/s3mock also ignores `If-Match` on PUT** (same class as Backblaze B2) — integration tests exercise the HEAD-compare fallback against it; the 412 mapping is unit-tested with mocks.
 - **S3 conditional headers need quoted entity-tags** — the adapter strips quotes on read and re-quotes on write (`quoteEtag`).
 - **macOS port 5000 is AirPlay Receiver** — probing dufs on `localhost:5000` from the host hits Apple's server (403 + `Server: AirTunes`). Probe via the Docker network instead.

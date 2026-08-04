@@ -1,4 +1,17 @@
-export const COLOR_KEYS = [
+export type ColorKey =
+  | 'red'
+  | 'orange'
+  | 'yellow'
+  | 'green'
+  | 'blue'
+  | 'purple'
+  | 'pink'
+  | 'teal'
+  | 'lime'
+  | 'brown'
+  | 'indigo';
+
+export const COLOR_KEYS: readonly ColorKey[] = [
   'red',
   'orange',
   'yellow',
@@ -10,9 +23,7 @@ export const COLOR_KEYS = [
   'lime',
   'brown',
   'indigo',
-] as const;
-
-export type ColorKey = (typeof COLOR_KEYS)[number];
+];
 
 export const COLOR_LABELS: Record<ColorKey, string> = {
   red: 'Red',
