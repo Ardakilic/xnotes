@@ -1,0 +1,8 @@
+node_modules
+.output
+.wxt
+.git
+.docker-home
+.docker-npm-cache
+demo/dist
+*.log

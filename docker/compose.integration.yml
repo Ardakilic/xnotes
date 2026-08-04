@@ -1,0 +1,30 @@
+name: xnotes-integration
+
+services:
+  webdav:
+    image: sigoden/dufs:v0.46.0
+    command: ['-a', 'testuser:testpass@/:rw', '--allow-all', '/data']
+    # scratch image has no shell to mkdir — mount /data in
+    volumes:
+      - type: tmpfs
+        target: /data
+
+  s3mock:
+    image: adobe/s3mock:3.11.0
+
+  tests:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.integration
+    environment:
+      WEBDAV_URL: http://webdav:5000
+      WEBDAV_USERNAME: testuser
+      WEBDAV_PASSWORD: testpass
+      S3_ENDPOINT: http://s3mock:9090
+      S3_REGION: us-east-1
+      S3_BUCKET: xnotes-test
+      S3_ACCESS_KEY: test-access-key
+      S3_SECRET_KEY: test-secret-key
+    depends_on:
+      - webdav
+      - s3mock

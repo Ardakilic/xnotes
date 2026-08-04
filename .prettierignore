@@ -1,0 +1,12 @@
+.output/
+.wxt/
+node_modules/
+.docker-home/
+.docker-npm-cache/
+demo/dist/
+.claude/
+.opencode/
+.github/
+*.md
+LICENSE
+package-lock.json

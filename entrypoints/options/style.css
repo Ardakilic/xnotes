@@ -1,0 +1,374 @@
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #666666;
+  --border: #d9d9d9;
+  --card-bg: #f7f7f7;
+  --accent: #1d6fd8;
+  --danger: #c62828;
+  --warning: #9a6b00;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d;
+    --fg: #e8e8e8;
+    --muted: #9a9a9a;
+    --border: #3a3f47;
+    --card-bg: #1f232a;
+    --accent: #6aa7f0;
+    --danger: #ef6a6a;
+    --warning: #e0b84f;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+}
+
+#app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+section {
+  margin-top: 32px;
+}
+
+button {
+  font: inherit;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button.danger {
+  color: var(--danger);
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+input[type='checkbox'] {
+  width: auto;
+}
+
+textarea {
+  width: 100%;
+  min-height: 64px;
+  box-sizing: border-box;
+}
+
+.onboarding {
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.onboarding p {
+  margin: 0;
+}
+
+.manager-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.manager-search {
+  flex: 1;
+  min-width: 200px;
+}
+
+.view-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.view-row .view-btn {
+  margin-left: 0;
+}
+
+.view-btn[aria-pressed='true'] {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+}
+
+.manager-count {
+  color: var(--muted);
+  margin: 12px 0 8px;
+}
+
+.chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 10px;
+  background: var(--card-bg);
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 18px;
+  display: inline-block;
+}
+
+.chip[aria-pressed='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.chip-small {
+  font-size: 11px;
+  padding: 1px 8px;
+}
+
+.chip-red {
+  background: #e5484d;
+  border-color: #e5484d;
+  color: #ffffff;
+}
+
+.chip-orange {
+  background: #f76808;
+  border-color: #f76808;
+  color: #ffffff;
+}
+
+.chip-yellow {
+  background: #d9a406;
+  border-color: #d9a406;
+  color: #ffffff;
+}
+
+.chip-green {
+  background: #30a46c;
+  border-color: #30a46c;
+  color: #ffffff;
+}
+
+.chip-blue {
+  background: #0091ff;
+  border-color: #0091ff;
+  color: #ffffff;
+}
+
+.chip-purple {
+  background: #8e4ec6;
+  border-color: #8e4ec6;
+  color: #ffffff;
+}
+
+.chip-pink {
+  background: #d6409f;
+  border-color: #d6409f;
+  color: #ffffff;
+}
+
+.chip-teal {
+  background: #12a594;
+  border-color: #12a594;
+  color: #ffffff;
+}
+
+.chip-lime {
+  background: #76b915;
+  border-color: #76b915;
+  color: #ffffff;
+}
+
+.chip-brown {
+  background: #9d6f57;
+  border-color: #9d6f57;
+  color: #ffffff;
+}
+
+.chip-indigo {
+  background: #5b5bd6;
+  border-color: #5b5bd6;
+  color: #ffffff;
+}
+
+.chip-none {
+  background: transparent;
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.notes-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.notes-table th,
+.notes-table td {
+  text-align: left;
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.notes-table th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.note-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.note-updated {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.note-actions {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.handle-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.handle-link:hover {
+  text-decoration: underline;
+}
+
+.notes-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.note-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--card-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.note-card .note-text {
+  margin: 0;
+}
+
+.note-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.swatches {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.empty-state {
+  color: var(--muted);
+  padding: 24px 0;
+}
+
+fieldset.backend-fields {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+  max-width: 480px;
+}
+
+.field input[type='checkbox'] {
+  align-self: flex-start;
+}
+
+.field-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.settings-message,
+.settings-test-result {
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.settings-error {
+  color: var(--danger);
+}
+
+.settings-warning {
+  color: var(--warning);
+}
+
+.settings-info {
+  color: var(--muted);
+}
+
+.passphrase-note {
+  color: var(--muted);
+  font-size: 13px;
+  max-width: 480px;
+}
+
+.sync-interval {
+  width: 80px;
+}
+
+#import-file,
+.import-file {
+  display: none;
+}

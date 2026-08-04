@@ -1,0 +1,112 @@
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #666666;
+  --border: #d9d9d9;
+  --card-bg: #f7f7f7;
+  --accent: #1d6fd8;
+  --danger: #c62828;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d;
+    --fg: #e8e8e8;
+    --muted: #9a9a9a;
+    --border: #3a3f47;
+    --card-bg: #1f232a;
+    --accent: #6aa7f0;
+    --danger: #ef6a6a;
+  }
+}
+
+body {
+  margin: 0;
+  min-width: 300px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
+
+#popup,
+#onboarding {
+  padding: 12px;
+}
+
+p {
+  margin: 6px 0;
+}
+
+button {
+  font: inherit;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--fg);
+  cursor: pointer;
+  margin: 4px 6px 4px 0;
+}
+
+button.danger {
+  color: var(--danger);
+}
+
+input {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-right: 6px;
+}
+
+.popup-links {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.popup-links a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.popup-links a:hover {
+  text-decoration: underline;
+}
+
+.popup-status {
+  font-weight: 600;
+}
+
+.popup-status-error {
+  color: var(--danger);
+}
+
+.popup-status-syncing {
+  color: var(--accent);
+}
+
+.popup-last-sync {
+  color: var(--muted);
+}
+
+.popup-error {
+  color: var(--danger);
+}
+
+.popup-local {
+  color: var(--muted);
+}
+
+.onboarding {
+  border-bottom: 1px solid var(--border);
+}
+
+.onboarding p {
+  margin: 0 0 8px;
+}
