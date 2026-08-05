@@ -1,0 +1,24 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": [
+    ".wxt/**/*",
+    "entrypoints/**/*",
+    "src/**/*",
+    "tests/**/*",
+    "demo/**/*",
+    "vitest.config.ts",
+    "vitest.integration.config.ts",
+    "wxt.config.ts"
+  ]
+}
