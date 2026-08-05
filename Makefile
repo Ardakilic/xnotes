@@ -19,7 +19,7 @@ endif
 
 DOCKER := docker run --rm $(USER_FLAGS) $(CACHE_FLAGS) -v "$(PWD)":/app -w /app $(NODE_IMAGE)
 
-.PHONY: setup test typecheck lint build zip dev dev-firefox integration
+.PHONY: setup test typecheck lint build zip dev dev-firefox integration flush
 
 setup: ## install dependencies (npm ci when a lockfile exists)
 	$(PREPARE)
@@ -52,3 +52,8 @@ integration: ## dockerized integration tests (dufs + S3 mock)
 	status=$$?; \
 	docker compose -f docker/compose.integration.yml down > /dev/null 2>&1; \
 	exit $$status
+
+flush: ## drop the npm cache volume + integration stack leftovers
+	docker compose -f docker/compose.integration.yml down -v > /dev/null 2>&1 || true
+	docker volume rm -f xnotes-npm-cache > /dev/null 2>&1 || true
+	rm -rf .docker-home .docker-npm-cache
