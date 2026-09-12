@@ -2,6 +2,11 @@ import { defineConfig } from 'wxt';
 
 export default defineConfig({
   manifestVersion: 3,
+  // ponytail: dev runs in Docker with no browser inside — skip web-ext auto-launch
+  // (it fails on missing CHROME_PATH); load .output/*-dev as unpacked manually
+  webExt: {
+    disabled: true,
+  },
   manifest: ({ browser }) => ({
     name: 'xNotes',
     description:
