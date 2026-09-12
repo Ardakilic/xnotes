@@ -85,6 +85,26 @@ describe('createPanel', () => {
     expect(panel.root.querySelector('textarea')).toBeNull();
   });
 
+  it('keeps edit mode and the draft when save fails, showing an error', async () => {
+    const hooks = {
+      ...makeHooks(null),
+      save: vi.fn(async (): Promise<void> => {
+        throw new Error('quota exceeded');
+      }),
+    };
+    const panel = createPanel('jack', hooks);
+    await flush();
+    need(panel.root.querySelector<HTMLButtonElement>('button.xn-add')).click();
+    const editor = need(panel.root.querySelector<HTMLTextAreaElement>('textarea.xn-editor'));
+    editor.value = 'precious draft';
+    need(panel.root.querySelector<HTMLButtonElement>('button.xn-save')).click();
+    await flush();
+    expect(panel.isEditing()).toBe(true);
+    const survivor = need(panel.root.querySelector<HTMLTextAreaElement>('textarea.xn-editor'));
+    expect(survivor.value).toBe('precious draft');
+    expect(panel.root.querySelector('.xn-error')?.textContent).toContain('Could not save');
+  });
+
   it('toggles swatch aria-pressed and can select none', async () => {
     const { panel } = await panelInEditMode(null);
     const teal = need(panel.root.querySelector<HTMLButtonElement>('button[title="Teal"]'));

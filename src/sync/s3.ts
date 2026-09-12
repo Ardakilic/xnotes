@@ -91,6 +91,9 @@ export class S3Adapter implements SyncAdapter {
       this.client.fetch(this.objectUrl, { method: 'HEAD', redirect: 'error' }),
     );
     if (head.status === 403) throw new SyncAuthError('S3 authentication failed');
+    if (head.status !== 200 && head.status !== 404) {
+      throw new SyncUnreachableError(`S3 HEAD failed: ${head.status}`);
+    }
     if (opts?.ifNoneMatch === '*') {
       if (head.ok) throw new SyncConflictError('remote blob already exists');
     } else if (opts?.ifMatch) {

@@ -8,6 +8,7 @@ import {
 import { getSettings, getSyncState } from '../../src/core/storage';
 import {
   allowPlaintextOverwriteOnce,
+  clearStaleSyncingStatus,
   forceNextPush,
   initScheduler,
   isPassphraseSet,
@@ -22,6 +23,7 @@ async function handle(msg: BackgroundRequest): Promise<BackgroundResponse> {
       await runCycle();
       return { ok: true };
     case 'get-sync-status': {
+      await clearStaleSyncingStatus();
       const state = await getSyncState();
       const settings = await getSettings();
       const response: SyncStatusResponse = {
@@ -55,6 +57,7 @@ async function handle(msg: BackgroundRequest): Promise<BackgroundResponse> {
 
 export default defineBackground(() => {
   initScheduler();
+  void clearStaleSyncingStatus();
   browser.runtime.onMessage.addListener((msg: unknown, _sender, sendResponse) => {
     const parsed = parseBackgroundRequest(msg);
     if (parsed === null) return;

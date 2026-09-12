@@ -270,8 +270,14 @@ export function mountManager(root: HTMLElement): void {
     const saveBtn = el('button', undefined, 'Save');
     saveBtn.type = 'button';
     saveBtn.addEventListener('click', () => {
-      editing = null;
-      void upsertNote(note.handle, textarea.value, selected).then(refresh);
+      void upsertNote(note.handle, textarea.value, selected)
+        .then(() => {
+          editing = null;
+          void refresh();
+        })
+        .catch(() => {
+          alert('Could not save — the note was not written. Please try again.');
+        });
     });
     const cancelBtn = el('button', undefined, 'Cancel');
     cancelBtn.type = 'button';
@@ -286,8 +292,13 @@ export function mountManager(root: HTMLElement): void {
 
   async function doDelete(note: NoteRecord): Promise<void> {
     if (!confirm(`Delete the note for @${note.handle}?`)) return;
+    try {
+      await deleteNote(note.handle);
+    } catch {
+      alert('Could not delete — the note was not removed. Please try again.');
+      return;
+    }
     if (editing !== null && editing.handleLower === note.handleLower) editing = null;
-    await deleteNote(note.handle);
     await refresh();
   }
 
@@ -314,8 +325,13 @@ export function mountManager(root: HTMLElement): void {
       return;
     }
     if (action.kind === 'abort') return;
-    if (action.mode === 'merge') await saveStore(merge(await getStore(), action.store));
-    else await saveStore(action.store);
+    try {
+      if (action.mode === 'merge') await saveStore(merge(await getStore(), action.store));
+      else await saveStore(action.store);
+    } catch {
+      alert('Could not import — the store was not written. Please try again.');
+      return;
+    }
     await refresh();
   }
 

@@ -35,6 +35,7 @@ export class SyncPassphraseRequiredError extends Error {
 
 let running = false;
 let pendingRerun = false;
+let staleClearPromise: Promise<void> | null = null;
 let passphrase: string | null = null;
 // ponytail: fallback passphrases bridge changes until a push re-encrypts the remote under
 // the current one; deduped, cleared on every successful push — grows only across
@@ -78,7 +79,7 @@ export function backoffMinutes(failureCount: number): number {
 
 /** Deterministic byte serialization (sorted keys) — used for hashing AND as the wire format. */
 export function encodeStore(store: StoreV2): Uint8Array<ArrayBuffer> {
-  const notes: Record<string, unknown> = {};
+  const notes: Record<string, unknown> = Object.create(null);
   for (const key of Object.keys(store.notes).sort()) {
     const n = store.notes[key]!;
     notes[key] = {
@@ -90,7 +91,7 @@ export function encodeStore(store: StoreV2): Uint8Array<ArrayBuffer> {
       updatedAt: n.updatedAt,
     };
   }
-  const tombstones: Record<string, number> = {};
+  const tombstones: Record<string, number> = Object.create(null);
   for (const key of Object.keys(store.tombstones).sort()) tombstones[key] = store.tombstones[key]!;
   return new TextEncoder().encode(JSON.stringify({ schemaVersion: 2, notes, tombstones }));
 }
@@ -323,12 +324,16 @@ async function cycleOnce(): Promise<void> {
 }
 
 export async function runCycle(): Promise<void> {
+  // ponytail: serialize stale-status recovery ahead of cycle work — a concurrently
+  // in-flight recovery's storage write must land before the cycle's status writes
+  const staleClear = clearStaleSyncingStatus();
   if (running) {
     pendingRerun = true;
     return;
   }
   running = true;
   try {
+    await staleClear;
     await cycleOnce();
   } finally {
     running = false;
@@ -337,6 +342,28 @@ export async function runCycle(): Promise<void> {
       void runCycle();
     }
   }
+}
+
+async function doClearStaleSyncingStatus(): Promise<void> {
+  // ponytail: single-flight `running` makes any persisted 'syncing' in a fresh SW stale —
+  // rewrite to a truthful error so the popup/badge don't lie after a service-worker death
+  if (running) return;
+  const state = await getSyncState();
+  if (state.status !== 'syncing' || running) return;
+  await saveSyncState({
+    ...state,
+    status: 'error',
+    lastError: 'Sync interrupted (extension was restarted)',
+  });
+}
+
+export function clearStaleSyncingStatus(): Promise<void> {
+  if (staleClearPromise === null) {
+    staleClearPromise = doClearStaleSyncingStatus().finally(() => {
+      staleClearPromise = null;
+    });
+  }
+  return staleClearPromise;
 }
 
 export async function rescheduleAlarm(): Promise<void> {

@@ -197,6 +197,15 @@ describe('put', () => {
     ).rejects.toThrow(SyncConflictError);
   });
 
+  it('HEAD-compare throws unreachable on an unexpected HEAD status without PUTting', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 500 }));
+    await expect(
+      new S3Adapter({ ...settings, forceHeadFallback: true }).put(body, { ifMatch: '"abc"' }),
+    ).rejects.toThrow(SyncUnreachableError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(req(0).method).toBe('HEAD');
+  });
+
   it('HEAD-compare reports conflict when ifNoneMatch is * and the blob exists', async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: '"x"' } }));
     await expect(

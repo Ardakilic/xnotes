@@ -14,6 +14,7 @@ import {
   saveSyncState,
   saveView,
   SETTINGS_KEY,
+  StorageWriteError,
   STORE_KEY,
   subscribeToStoreChanges,
   toNoteRecord,
@@ -310,6 +311,40 @@ describe('rejected storage reads', () => {
     spy.mockRestore();
     const store = await getStore();
     expect(store.notes['jack']?.text).toBe('original');
+  });
+});
+
+describe('rejected storage writes', () => {
+  it('upsertNote rejects when the store write fails', async () => {
+    await upsertNote('jack', 'original', null, 100);
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set').mockImplementation(() => {
+      throw new Error('QUOTA_BYTES quota exceeded');
+    });
+    await expect(upsertNote('jack', 'changed', null, 200)).rejects.toBeInstanceOf(
+      StorageWriteError,
+    );
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['jack']?.text).toBe('original');
+  });
+
+  it('deleteNote rejects when the store write fails', async () => {
+    await upsertNote('jack', 'original', null, 100);
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set').mockImplementation(() => {
+      throw new Error('QUOTA_BYTES quota exceeded');
+    });
+    await expect(deleteNote('jack')).rejects.toBeInstanceOf(StorageWriteError);
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['jack']?.text).toBe('original');
+  });
+
+  it('saveStore rejects when the write fails (import/sync-merge path)', async () => {
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set').mockImplementation(() => {
+      throw new Error('QUOTA_BYTES quota exceeded');
+    });
+    await expect(saveStore(emptyStore())).rejects.toBeInstanceOf(StorageWriteError);
+    spy.mockRestore();
   });
 });
 

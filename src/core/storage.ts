@@ -42,12 +42,30 @@ async function safeRead(key: string): Promise<ReadResult> {
   }
 }
 
+export class StorageWriteError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StorageWriteError';
+  }
+}
+
 async function safeWrite(key: string, value: unknown): Promise<void> {
   if (!contextAlive()) return;
   try {
     await browser.storage.local.set({ [key]: value });
   } catch {
-    // ponytail: fail-soft — swallow quota/invalidated-context errors
+    // ponytail: fail-soft for bookkeeping keys only (sync-state/settings/view/quarantine) —
+    // store data goes through strictWrite so write failures surface instead of lying
+  }
+}
+
+async function strictWrite(key: string, value: unknown): Promise<void> {
+  if (!contextAlive()) return;
+  try {
+    await browser.storage.local.set({ [key]: value });
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    throw new StorageWriteError(`Could not save — browser storage write failed (${cause})`);
   }
 }
 
@@ -133,7 +151,7 @@ export async function getStore(): Promise<StoreV2> {
 }
 
 export async function saveStore(store: StoreV2): Promise<void> {
-  await safeWrite(STORE_KEY, store);
+  await strictWrite(STORE_KEY, store);
 }
 
 function normalizeHandle(handle: string): string {

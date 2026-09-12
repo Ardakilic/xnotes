@@ -1,6 +1,13 @@
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getStore, getSyncState, toStoreV2, upsertNote } from '../core/storage';
+import {
+  getStore,
+  getSyncState,
+  saveStore,
+  saveSyncState,
+  toStoreV2,
+  upsertNote,
+} from '../core/storage';
 import type { BackendSettings, Settings, StoreV2 } from '../core/types';
 import {
   SyncAuthError,
@@ -14,6 +21,7 @@ import {
   allowPlaintextOverwriteOnce,
   backoffMinutes,
   BACKOFF_ALARM,
+  clearStaleSyncingStatus,
   forceNextPush,
   initScheduler,
   isPassphraseSet,
@@ -47,6 +55,7 @@ class FakeAdapter {
   slowGets = 0;
   inFlight = 0;
   maxConcurrent = 0;
+  gate: Promise<void> | null = null;
 
   async probe(): Promise<void> {}
 
@@ -61,6 +70,7 @@ class FakeAdapter {
     this.maxConcurrent = Math.max(this.maxConcurrent, this.inFlight);
     try {
       this.gets++;
+      if (this.gate !== null) await this.gate;
       if (this.slowGets > 0) {
         this.slowGets--;
         await new Promise((r) => setTimeout(r, 20));
@@ -247,6 +257,88 @@ describe('conflict retry', () => {
     expect(fake.puts).toHaveLength(2);
     const pushed = toStoreV2(JSON.parse(new TextDecoder().decode(fake.puts[1]!.bytes)));
     expect(pushed?.notes['jack']?.text).toBe('v2');
+  });
+});
+
+describe('merge result integrity through a full cycle', () => {
+  it('preserves a __proto__-handle note end-to-end (merge + encode + local save)', async () => {
+    await saveSettings(settingsOf({}));
+    const local = await getStore();
+    const protoNote = {
+      handle: '__proto__',
+      handleLower: '__proto__',
+      text: 'prototype-safe',
+      color: null,
+      createdAt: 9000,
+      updatedAt: 9000,
+    };
+    local.notes['__proto__'] = protoNote;
+    await saveStore(local);
+    fake.remote = { bytes: storeBytes(note('remoteuser', 5000)), etag: 'e0' };
+    await runCycle();
+    const store = await getStore();
+    expect(Object.prototype.hasOwnProperty.call(store.notes, '__proto__')).toBe(true);
+    expect(store.notes['__proto__']?.text).toBe('prototype-safe');
+    expect(store.notes['remoteuser']).toBeDefined();
+    const pushed = toStoreV2(JSON.parse(new TextDecoder().decode(fake.puts[0]!.bytes)));
+    expect(Object.prototype.hasOwnProperty.call(pushed?.notes, '__proto__')).toBe(true);
+    expect(pushed?.notes['__proto__']?.text).toBe('prototype-safe');
+  });
+});
+
+describe('stale syncing status after SW death', () => {
+  it('rewrites a persisted syncing status when no cycle is in flight', async () => {
+    await saveSettings(settingsOf({}));
+    await saveSyncState({
+      deviceId: 'd1',
+      lastSyncAt: 10,
+      lastRemoteEtag: 'e',
+      status: 'syncing',
+      lastError: null,
+      lastSyncedLocalHash: 'h',
+      failureCount: 0,
+    });
+    await clearStaleSyncingStatus();
+    const state = await getSyncState();
+    expect(state.status).not.toBe('syncing');
+    expect(state.status).toBe('error');
+    expect(state.lastError).toContain('Sync interrupted');
+  });
+
+  it('leaves a non-syncing status untouched', async () => {
+    await saveSettings(settingsOf({}));
+    await saveSyncState({
+      deviceId: 'd1',
+      lastSyncAt: 10,
+      lastRemoteEtag: 'e',
+      status: 'idle',
+      lastError: null,
+      lastSyncedLocalHash: 'h',
+      failureCount: 3,
+    });
+    await clearStaleSyncingStatus();
+    const state = await getSyncState();
+    expect(state.status).toBe('idle');
+    expect(state.failureCount).toBe(3);
+  });
+
+  it('does not clobber the status of a real in-flight cycle', async () => {
+    await saveSettings(settingsOf({}));
+    let release!: () => void;
+    fake.gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const cyclePromise = runCycle();
+    await vi.waitFor(() => {
+      expect(fake.inFlight).toBe(1);
+    });
+    expect((await getSyncState()).status).toBe('syncing');
+    await clearStaleSyncingStatus();
+    expect((await getSyncState()).status).toBe('syncing');
+    release();
+    fake.gate = null;
+    await cyclePromise;
+    expect((await getSyncState()).status).toBe('idle');
   });
 });
 
