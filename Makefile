@@ -44,12 +44,14 @@ zip: ## store-ready zips (firefox zip includes sources zip automatically)
 # ponytail: PORT_FLAGS is target-specific — docker requires -p before the image,
 # anything after it becomes the container command
 dev: PORT_FLAGS := -p 3000:3000
-dev: ## chromium dev build with HMR; load .output/chrome-mv3 as unpacked
+dev: ## chromium dev build with HMR; load .output/chrome-mv3-dev as unpacked
+	@echo "HMR server: http://localhost:3000 (keep this running, then load .output/chrome-mv3-dev as unpacked)"
 	$(DOCKER) npm run dev -- --port 3000 --host 0.0.0.0
 
 # ponytail: `dev-firefox` not `dev:firefox` — macOS ships GNU make 3.81, which rejects colons in targets
 dev-firefox: PORT_FLAGS := -p 3001:3001
-dev-firefox: ## firefox dev build; load .output/firefox-mv3
+dev-firefox: ## firefox dev build; load .output/firefox-mv3-dev
+	@echo "HMR server: http://localhost:3001 (keep this running, then load .output/firefox-mv3-dev as a temporary add-on)"
 	$(DOCKER) npm run dev:firefox -- --port 3001 --host 0.0.0.0
 
 generate-assets: ## regenerate public/icons from assets/logo-{light,dark}.png
