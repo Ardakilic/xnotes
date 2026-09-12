@@ -311,6 +311,17 @@ describe('errors and backoff', () => {
     expect(await fakeBrowser.alarms.get(BACKOFF_ALARM)).toBeUndefined();
   });
 
+  it('clears a pending backoff alarm when an auth error surfaces', async () => {
+    await saveSettings(settingsOf({}));
+    await fakeBrowser.alarms.create(BACKOFF_ALARM, { delayInMinutes: 2 });
+    fake.getError = new SyncAuthError('401');
+    await runCycle();
+    const state = await getSyncState();
+    expect(state.status).toBe('error');
+    expect(state.lastError).toContain('Authentication');
+    expect(await fakeBrowser.alarms.get(BACKOFF_ALARM)).toBeUndefined();
+  });
+
   it('schedules a backoff alarm for non-auth errors', async () => {
     await saveSettings(settingsOf({}));
     fake.getError = new SyncUnreachableError('network down');
@@ -472,6 +483,45 @@ describe('encryption', () => {
     expect(decrypted?.notes['remoteuser']).toBeDefined();
     await expect(decryptStore(bytes, 'passphrase-A')).rejects.toBeInstanceOf(SyncDecodeError);
     expect((await getStore()).notes['otherdevice']).toBeDefined();
+  });
+
+  it('retains fallbacks across an A→B→C change when cycles keep failing, and survives a middle-value loss', async () => {
+    await saveSettings(settingsOf({ encryptionEnabled: true }));
+    setPassphrase('passphrase-A');
+    await upsertNote('jack', 'local note', null, 9000);
+    fake.remote = {
+      bytes: await encryptStore(note('remoteuser', 5000), 'passphrase-A'),
+      etag: 'e0',
+    };
+    await runCycle();
+    expect(fake.puts).toHaveLength(1);
+
+    fake.getError = new SyncUnreachableError('network down');
+    setPassphrase('passphrase-B');
+    await runCycle();
+    expect((await getSyncState()).status).toBe('error');
+
+    setPassphrase('passphrase-C');
+    await runCycle();
+    expect((await getSyncState()).status).toBe('error');
+
+    fake.getError = null;
+    fake.remote = {
+      bytes: await encryptStore(note('otherdevice', 6000), 'passphrase-A'),
+      etag: 'e1',
+    };
+    forceNextPush();
+    await runCycle();
+
+    const state = await getSyncState();
+    expect(state.status).toBe('idle');
+    expect(fake.puts).toHaveLength(2);
+    const bytes = fake.puts[1]!.bytes;
+    const decrypted = toStoreV2(await decryptStore(bytes, 'passphrase-C'));
+    expect(decrypted?.notes['jack']?.text).toBe('local note');
+    expect(decrypted?.notes['otherdevice']).toBeDefined();
+    expect(decrypted?.notes['remoteuser']).toBeDefined();
+    await expect(decryptStore(bytes, 'passphrase-A')).rejects.toBeInstanceOf(SyncDecodeError);
   });
 
   it('converts the remote to plaintext when encryption is disabled with a changed remote', async () => {

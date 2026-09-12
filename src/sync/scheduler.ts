@@ -36,9 +36,10 @@ export class SyncPassphraseRequiredError extends Error {
 let running = false;
 let pendingRerun = false;
 let passphrase: string | null = null;
-// ponytail: bridges exactly one passphrase change; a second change before any successful
-// cycle overwrites it with the middle value (chain depth 1) — keep a list if that bites
-let previousPassphrase: string | null = null;
+// ponytail: fallback passphrases bridge changes until a push re-encrypts the remote under
+// the current one; deduped, cleared on every successful push — grows only across
+// never-syncing passphrase churn, which resets at the first success
+let passphraseFallbacks: string[] = [];
 let overwritePlaintextOnce = false;
 let forcePushOnce = false;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -54,7 +55,7 @@ export function setAdapterFactoryForTests(
 export function setPassphrase(value: string | null): void {
   const next = value === '' ? null : value;
   if (passphrase !== null && next !== null && next !== passphrase) {
-    previousPassphrase = passphrase;
+    if (!passphraseFallbacks.includes(passphrase)) passphraseFallbacks.push(passphrase);
   }
   passphrase = next;
 }
@@ -127,12 +128,17 @@ function parsePlaintext(bytes: Uint8Array): StoreV2 {
 }
 
 async function decryptEnvelope(bytes: Uint8Array): Promise<unknown> {
-  try {
-    return await decryptStore(bytes, requirePassphrase());
-  } catch (err) {
-    if (!(err instanceof SyncDecodeError) || previousPassphrase === null) throw err;
-    return decryptStore(bytes, previousPassphrase);
+  const candidates = [requirePassphrase(), ...passphraseFallbacks];
+  let lastError: SyncDecodeError | null = null;
+  for (const candidate of candidates) {
+    try {
+      return await decryptStore(bytes, candidate);
+    } catch (err) {
+      if (!(err instanceof SyncDecodeError)) throw err;
+      lastError = err;
+    }
   }
+  throw lastError!;
 }
 
 async function decodeRemote(
@@ -284,7 +290,7 @@ async function cycleOnce(): Promise<void> {
     };
     await saveSyncState(next);
     await updateBadge(next);
-    previousPassphrase = null;
+    passphraseFallbacks = [];
   } catch (err) {
     if (force) forcePushOnce = true;
     const after = await getSyncState();
@@ -298,7 +304,13 @@ async function cycleOnce(): Promise<void> {
     };
     await saveSyncState(next);
     await updateBadge(next);
-    if (!(err instanceof SyncAuthError)) {
+    if (err instanceof SyncAuthError) {
+      try {
+        await browser.alarms.clear(BACKOFF_ALARM);
+      } catch {
+        // ponytail: same best-effort alarm bookkeeping as the create below
+      }
+    } else {
       try {
         await browser.alarms.create(BACKOFF_ALARM, {
           delayInMinutes: backoffMinutes(failureCount),
