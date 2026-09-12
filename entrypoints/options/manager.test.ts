@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getStore, saveStore, toStoreV2, upsertNote } from '../../src/core/storage';
+import { emptyAliases, recordObservation } from '../../src/core/aliases';
+import { getStore, saveAliases, saveStore, toStoreV2, upsertNote } from '../../src/core/storage';
 import type { ColorKey } from '../../src/core/colors';
 import type { NoteRecord, StoreV2 } from '../../src/core/types';
 import { buildExport, chooseImportAction, mountManager } from './manager';
@@ -28,6 +29,19 @@ async function mount(notes: NoteRecord[]): Promise<HTMLElement> {
   mountManager(root);
   await vi.waitFor(() => {
     expect(root.querySelectorAll('.note-row, .note-card').length).toBe(notes.length);
+  });
+  return root;
+}
+
+async function mountWithStore(store: StoreV2): Promise<HTMLElement> {
+  await saveStore(store);
+  const root = document.createElement('div');
+  document.body.append(root);
+  mountManager(root);
+  await vi.waitFor(() => {
+    expect(root.querySelectorAll('.note-row, .note-card').length).toBe(
+      Object.keys(store.notes).length,
+    );
   });
   return root;
 }
@@ -78,6 +92,14 @@ function stubAlert(): string[] {
   return alerts;
 }
 
+function stubPrompt(answer: string | null): void {
+  Object.defineProperty(window, 'prompt', {
+    value: () => answer,
+    configurable: true,
+    writable: true,
+  });
+}
+
 beforeEach(() => {
   fakeBrowser.reset();
 });
@@ -86,6 +108,7 @@ afterEach(() => {
   document.body.replaceChildren();
   Reflect.deleteProperty(window, 'confirm');
   Reflect.deleteProperty(window, 'alert');
+  Reflect.deleteProperty(window, 'prompt');
   vi.restoreAllMocks();
 });
 
@@ -360,5 +383,102 @@ describe('import', () => {
       expect(alerts).toContain('Not a valid xNotes backup file');
     });
     expect(Object.keys((await getStore()).notes)).toEqual(['jack']);
+  });
+});
+
+describe('orphaned notes', () => {
+  async function seedOrphan(): Promise<HTMLElement> {
+    const store = storeWith([
+      { ...makeNote('victim', 'original owner text', 'red', 200), userId: '111' },
+    ]);
+    await saveAliases(recordObservation(emptyAliases(), 'victim', '222', 300));
+    return mountWithStore(store);
+  }
+
+  it('lists a withheld note in the orphan section with handle and ID context', async () => {
+    const root = await seedOrphan();
+    const section = root.querySelector('.orphan-section');
+    expect(section).not.toBeNull();
+    expect(section?.textContent).toContain('@victim');
+    expect(section?.textContent).toContain('111');
+    expect(section?.textContent).toContain('original owner text');
+  });
+
+  it('shows no orphan section when nothing is withheld', async () => {
+    const root = await mount([makeNote('jack', 'hello', null, 100)]);
+    expect(root.querySelector('.orphan-section')).toBeNull();
+  });
+
+  it('explicit delete removes the orphan and writes a tombstone', async () => {
+    stubConfirm([true]);
+    const root = await seedOrphan();
+    const section = root.querySelector('.orphan-section');
+    expect(section).not.toBeNull();
+    if (section === null) return;
+    button(section, 'Delete').click();
+    await vi.waitFor(async () => {
+      const store = await getStore();
+      expect(store.notes['victim']).toBeUndefined();
+      expect(store.tombstones['victim']).toBeDefined();
+    });
+  });
+
+  it('explicit reassign binds the content to the chosen handle', async () => {
+    stubPrompt('newhome');
+    const root = await seedOrphan();
+    const section = root.querySelector('.orphan-section');
+    expect(section).not.toBeNull();
+    if (section === null) return;
+    button(section, 'Reassign').click();
+    await vi.waitFor(async () => {
+      const store = await getStore();
+      expect(store.notes['newhome']?.text).toBe('original owner text');
+      expect(store.notes['newhome']?.userId).toBeUndefined();
+      expect(store.notes['victim']).toBeUndefined();
+      expect(store.tombstones['victim']).toBeDefined();
+    });
+  });
+
+  it('explicit reassign refuses a populated target without writing', async () => {
+    stubPrompt('taken');
+    const alerts = stubAlert();
+    const store = storeWith([
+      { ...makeNote('victim', 'original owner text', 'red', 200), userId: '111' },
+      makeNote('taken', 'kept text', null, 300),
+    ]);
+    await saveAliases(recordObservation(emptyAliases(), 'victim', '222', 300));
+    const root = await mountWithStore(store);
+    const section = root.querySelector('.orphan-section');
+    expect(section).not.toBeNull();
+    if (section === null) return;
+    button(section, 'Reassign').click();
+    await vi.waitFor(() => {
+      expect(alerts.some((m) => m.includes('already has a note'))).toBe(true);
+    });
+    const after = await getStore();
+    expect(after.notes['taken']?.text).toBe('kept text');
+    expect(after.notes['victim']?.text).toBe('original owner text');
+    expect(after.tombstones['victim']).toBeUndefined();
+  });
+});
+
+describe('formerly-known-handle display', () => {
+  it('shows the former handle for renamed notes and hides it for direct notes', async () => {
+    const store = storeWith([
+      { ...makeNote('newhandle', 'moved', 'teal', 400), userId: '123' },
+      makeNote('direct', 'plain', null, 300),
+    ]);
+    store.tombstones['oldhandle'] = 350;
+    await saveAliases(
+      recordObservation(
+        recordObservation(emptyAliases(), 'oldhandle', '123', 100),
+        'newhandle',
+        '123',
+        350,
+      ),
+    );
+    const root = await mountWithStore(store);
+    expect(rowWith(root, '@newhandle').textContent).toContain('formerly @oldhandle');
+    expect(rowWith(root, '@direct').textContent).not.toContain('formerly @');
   });
 });

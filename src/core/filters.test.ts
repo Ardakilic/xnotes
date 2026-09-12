@@ -54,4 +54,15 @@ describe('filterNotes', () => {
   it('sorts by updatedAt descending', () => {
     expect(filterNotes(notes, '', new Set()).map((n) => n.updatedAt)).toEqual([300, 200, 100]);
   });
+
+  it('filters notes carrying userId without behavior change', () => {
+    const identified: NoteRecord[] = [
+      { ...note('alice', 'ship it', 'red', 300), userId: '111' },
+      { ...note('bob', 'notes about whales', 'blue', 100), userId: '222' },
+    ];
+    expect(filterNotes(identified, 'bob', new Set()).map((n) => n.handle)).toEqual(['bob']);
+    expect(filterNotes(identified, 'whales', new Set()).map((n) => n.handle)).toEqual(['bob']);
+    expect(filterNotes(identified, '', new Set(['red'])).map((n) => n.handle)).toEqual(['alice']);
+    expect(filterNotes(identified, '', new Set())).toHaveLength(2);
+  });
 });

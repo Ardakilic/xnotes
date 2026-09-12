@@ -61,3 +61,35 @@ describe('parseImportFile', () => {
     expect(parseImportFile('"just a string"')).toBeNull();
   });
 });
+
+describe('userId', () => {
+  it('round-trips userId through export and import', () => {
+    const withId: StoreV2 = {
+      schemaVersion: 2,
+      notes: {
+        jack: {
+          handle: 'jack',
+          handleLower: 'jack',
+          text: 'hi',
+          color: null,
+          createdAt: 1,
+          updatedAt: 2,
+          userId: '123',
+        },
+      },
+      tombstones: {},
+    };
+    const { json } = exportStoreJson(withId);
+    expect(json).toContain('123');
+    expect(parseImportFile(json)).toEqual(withId);
+  });
+
+  it('drops invalid userIds on import', () => {
+    const raw = JSON.stringify({
+      schemaVersion: 2,
+      notes: { jack: { handle: 'jack', text: 'hi', createdAt: 1, updatedAt: 2, userId: 'abc' } },
+      tombstones: {},
+    });
+    expect(parseImportFile(raw)?.notes['jack']?.userId).toBeUndefined();
+  });
+});

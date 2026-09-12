@@ -75,6 +75,21 @@ describe('S3 adapter against a real S3-compatible mock', () => {
     }
   });
 
+  it('round-trips a note carrying userId', async () => {
+    const adapter = makeAdapter({ prefix: 'userid/' });
+    const origin = store('alice', 1000);
+    const note = origin.notes['alice'];
+    if (note === undefined) throw new Error('fixture missing');
+    note.userId = '12345';
+    await adapter.put(encode(origin));
+    const got = await adapter.get();
+    expect(got.kind).toBe('found');
+    if (got.kind === 'found') {
+      const decoded: StoreV2 = JSON.parse(new TextDecoder().decode(got.data));
+      expect(decoded.notes['alice']?.userId).toBe('12345');
+    }
+  });
+
   it('conditional GET answers not-modified for a known etag', async () => {
     const adapter = makeAdapter({ prefix: 'etag/' });
     const { etag } = await adapter.put(encode(store('bob', 2000)));

@@ -89,6 +89,7 @@ export function encodeStore(store: StoreV2): Uint8Array<ArrayBuffer> {
       handleLower: n.handleLower,
       text: n.text,
       updatedAt: n.updatedAt,
+      userId: n.userId ?? null,
     };
   }
   const tombstones: Record<string, number> = Object.create(null);
@@ -96,6 +97,7 @@ export function encodeStore(store: StoreV2): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(JSON.stringify({ schemaVersion: 2, notes, tombstones }));
 }
 
+/** SHA-256 hex of {@link encodeStore} bytes; changes when any note field changes. */
 export async function hashStore(store: StoreV2): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', encodeStore(store));
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');

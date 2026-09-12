@@ -1,13 +1,17 @@
 import { COLOR_KEYS, COLOR_LABELS } from '../../src/core/colors';
 import type { ColorKey } from '../../src/core/colors';
+import { emptyAliases, getAlias, lookupByUserId, type AliasStore } from '../../src/core/aliases';
 import { filterNotes } from '../../src/core/filters';
 import type { ColorFilter } from '../../src/core/filters';
 import { formatTimestamp } from '../../src/core/format';
 import { exportStoreJson, parseImportFile } from '../../src/core/import-export';
 import {
   deleteNote,
+  getAliases,
   getStore,
   getView,
+  reassignNote,
+  type ReassignResult,
   saveStore,
   saveView,
   subscribeToStoreChanges,
@@ -67,6 +71,34 @@ function askImportChoice(): ImportChoice {
     return 'replace';
   }
   return 'abort';
+}
+
+/**
+ * A note is orphaned when its handle's recorded binding disagrees with the
+ * note's own identity: both the alias and `note.userId` are known and
+ * differ. Surfaces hijack-withheld notes; never auto-resolves.
+ */
+export function isOrphanNote(note: NoteRecord, aliases: AliasStore): boolean {
+  if (note.userId === undefined) return false;
+  const alias = getAlias(aliases, note.handleLower);
+  return alias !== null && alias.userId !== note.userId;
+}
+
+/**
+ * Formerly-known-handle display for a renamed note: other handles bound to
+ * the note's user ID whose keys carry a tombstone (the rename source).
+ * First sorted match wins; `null` when the note arrived directly.
+ */
+export function formerHandleFor(
+  note: NoteRecord,
+  aliases: AliasStore,
+  tombstones: Record<string, number>,
+): string | null {
+  if (note.userId === undefined) return null;
+  const others = lookupByUserId(aliases, note.userId)
+    .filter((candidate) => candidate !== note.handleLower && tombstones[candidate] !== undefined)
+    .sort();
+  return others[0] ?? null;
 }
 
 export function mountManager(root: HTMLElement): void {
@@ -140,11 +172,19 @@ export function mountManager(root: HTMLElement): void {
     void refresh();
   });
 
+  /** Reload store and aliases, then re-render. Aliases are local-only reads. */
   async function refresh(): Promise<void> {
-    renderList(await getStore());
+    const store = await getStore();
+    const aliasRead = await getAliases();
+    renderList(store, aliasRead.ok ? aliasRead.aliases : emptyAliases());
   }
 
-  function renderList(store: StoreV2): void {
+  /**
+   * Render the main list (unchanged filter/sort; orphans stay listed there)
+   * plus a separate orphan section when orphans exist. The orphan section
+   * is unfiltered so withheld notes are never hidden by the search filter.
+   */
+  function renderList(store: StoreV2, aliases: AliasStore): void {
     const all = Object.values(store.notes);
     const notes = filterNotes(all, query, colors);
     const filtered = query.trim() !== '' || colors.size > 0;
@@ -163,10 +203,56 @@ export function mountManager(root: HTMLElement): void {
     }
     if (notes.length === 0) {
       listWrap.replaceChildren(el('p', 'empty-state', 'No notes match the current filters.'));
+      appendOrphanSection(store, aliases);
       return;
     }
-    if (view === 'table') renderTable(notes);
-    else renderCards(notes);
+    if (view === 'table') renderTable(notes, store, aliases);
+    else renderCards(notes, store, aliases);
+    appendOrphanSection(store, aliases);
+  }
+
+  /** Append the orphan section when withheld notes exist; no-op otherwise. */
+  function appendOrphanSection(store: StoreV2, aliases: AliasStore): void {
+    const orphans = Object.values(store.notes)
+      .filter((note) => isOrphanNote(note, aliases))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    if (orphans.length === 0) return;
+    listWrap.append(buildOrphanSection(orphans));
+  }
+
+  /**
+   * Build the orphan review section: each row shows the last-known handle,
+   * the recorded user ID context, and explicit Delete/Reassign actions.
+   * Never auto-resolves.
+   */
+  function buildOrphanSection(orphans: NoteRecord[]): HTMLElement {
+    const section = el('section', 'orphan-section');
+    section.append(el('h2', 'orphan-heading', 'Orphaned notes'));
+    section.append(
+      el(
+        'p',
+        'orphan-expl',
+        'These notes were withheld from their profile because the handle now ' +
+          'belongs to a different account. Delete or reassign them — nothing happens automatically.',
+      ),
+    );
+    for (const note of orphans) {
+      const row = el('div', 'orphan-row');
+      row.append(profileLink(note.handle));
+      row.append(el('span', 'orphan-id', `ID ${note.userId ?? 'unknown'}`));
+      row.append(el('span', 'orphan-text', note.text));
+      const actions = el('div', 'note-actions');
+      actions.append(buildReassignButton(note), buildDeleteButton(note));
+      row.append(actions);
+      section.append(row);
+    }
+    return section;
+  }
+
+  /** Formerly-known-handle marker for a row, or `null` when direct. */
+  function formerMarker(note: NoteRecord, store: StoreV2, aliases: AliasStore): HTMLElement | null {
+    const former = formerHandleFor(note, aliases, store.tombstones);
+    return former === null ? null : el('span', 'former-handle', `formerly @${former}`);
   }
 
   function editSlot(note: NoteRecord): HTMLElement | null {
@@ -174,7 +260,8 @@ export function mountManager(root: HTMLElement): void {
     return null;
   }
 
-  function renderTable(notes: NoteRecord[]): void {
+  /** Render the main table; renamed notes show their former handle. */
+  function renderTable(notes: NoteRecord[], store: StoreV2, aliases: AliasStore): void {
     const table = el('table', 'notes-table');
     const headRow = el('tr');
     for (const label of ['Profile', 'Note', 'Color', 'Updated', ''])
@@ -196,6 +283,8 @@ export function mountManager(root: HTMLElement): void {
       const tr = el('tr', 'note-row');
       const handleTd = el('td');
       handleTd.append(profileLink(note.handle));
+      const marker = formerMarker(note, store, aliases);
+      if (marker !== null) handleTd.append(marker);
       const textTd = el('td', 'note-text', note.text);
       const colorTd = el('td');
       colorTd.append(colorChip(note.color, true));
@@ -209,7 +298,8 @@ export function mountManager(root: HTMLElement): void {
     listWrap.replaceChildren(table);
   }
 
-  function renderCards(notes: NoteRecord[]): void {
+  /** Render the main card grid; renamed notes show their former handle. */
+  function renderCards(notes: NoteRecord[], store: StoreV2, aliases: AliasStore): void {
     const grid = el('div', 'notes-cards');
     for (const note of notes) {
       const form = editSlot(note);
@@ -223,6 +313,8 @@ export function mountManager(root: HTMLElement): void {
         profileLink(note.handle),
         el('span', 'note-updated', formatTimestamp(note.updatedAt)),
       );
+      const cardMarker = formerMarker(note, store, aliases);
+      if (cardMarker !== null) head.append(cardMarker);
       card.append(head, el('p', 'note-text', note.text), colorChip(note.color, true));
       const actions = el('div', 'note-actions');
       actions.append(buildEditButton(note), buildDeleteButton(note));
@@ -244,6 +336,15 @@ export function mountManager(root: HTMLElement): void {
     button.type = 'button';
     button.addEventListener('click', () => {
       void doDelete(note);
+    });
+    return button;
+  }
+
+  function buildReassignButton(note: NoteRecord): HTMLButtonElement {
+    const button = el('button', undefined, 'Reassign');
+    button.type = 'button';
+    button.addEventListener('click', () => {
+      void doReassign(note);
     });
     return button;
   }
@@ -299,6 +400,40 @@ export function mountManager(root: HTMLElement): void {
       return;
     }
     if (editing !== null && editing.handleLower === note.handleLower) editing = null;
+    await refresh();
+  }
+
+  /**
+   * Explicit orphan reassign via the storage-level atomic move: the orphan's
+   * text/color moves under the chosen handle with the source tombstoned.
+   * Same-handle choice is a no-op. A populated target refuses without
+   * writing; a vanished source just refreshes. Fail-soft with alerts like
+   * other manager actions.
+   */
+  async function doReassign(note: NoteRecord): Promise<void> {
+    const answer = prompt(`Move note for @${note.handle} to which handle?`);
+    if (answer === null) return;
+    const target = answer.trim().replace(/^@/, '').trim();
+    if (target === '') return;
+    if (!/^[A-Za-z0-9_]{1,15}$/.test(target)) {
+      alert('That handle is not valid.');
+      return;
+    }
+    if (target.toLowerCase() === note.handleLower) return;
+    let result: ReassignResult;
+    try {
+      result = await reassignNote(note.handle, target);
+    } catch {
+      alert('Could not reassign — the store was not written. Please try again.');
+      return;
+    }
+    if (result === 'target-occupied') {
+      alert('That handle already has a note — reassign was not performed.');
+      return;
+    }
+    if (result === 'moved' && editing !== null && editing.handleLower === note.handleLower) {
+      editing = null;
+    }
     await refresh();
   }
 

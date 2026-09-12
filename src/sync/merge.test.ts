@@ -6,8 +6,23 @@ import { canonicalNote, merge, TOMBSTONE_MAX_AGE_MS } from './merge';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NOW = 1_750_000_000_000;
 
-function makeNote(handle: string, updatedAt: number, text = 'text', createdAt = 1): NoteRecord {
-  return { handle, handleLower: handle.toLowerCase(), text, color: null, createdAt, updatedAt };
+function makeNote(
+  handle: string,
+  updatedAt: number,
+  text = 'text',
+  createdAt = 1,
+  userId?: string,
+): NoteRecord {
+  const note: NoteRecord = {
+    handle,
+    handleLower: handle.toLowerCase(),
+    text,
+    color: null,
+    createdAt,
+    updatedAt,
+  };
+  if (userId !== undefined) note.userId = userId;
+  return note;
 }
 
 function storeWith(
@@ -133,6 +148,60 @@ describe('merge', () => {
     }
     expect(merged.notes['old']).toBeUndefined();
     expect(merged.tombstones['old']).toBeUndefined();
+  });
+});
+
+describe('merge with userId', () => {
+  it('orders present-vs-absent ties deterministically in both directions', () => {
+    const withId = makeNote('a', 150, 'same', 1, '123');
+    const withoutId = makeNote('a', 150, 'same');
+    const storeA = storeWith({ a: withId });
+    const storeB = storeWith({ a: withoutId });
+    const expected = canonicalNote(withId) > canonicalNote(withoutId) ? withId : withoutId;
+    expect(merge(storeA, storeB, NOW).notes['a']).toEqual(expected);
+    expect(merge(storeA, storeB, NOW)).toEqual(merge(storeB, storeA, NOW));
+  });
+
+  it('orders mismatched userIds deterministically in both directions', () => {
+    const noteA = makeNote('a', 150, 'same', 1, '111');
+    const noteB = makeNote('a', 150, 'same', 1, '222');
+    const storeA = storeWith({ a: noteA });
+    const storeB = storeWith({ a: noteB });
+    const expected = canonicalNote(noteA) > canonicalNote(noteB) ? noteA : noteB;
+    expect(merge(storeA, storeB, NOW).notes['a']).toEqual(expected);
+    expect(merge(storeA, storeB, NOW)).toEqual(merge(storeB, storeA, NOW));
+  });
+
+  it('is idempotent with userIds present', () => {
+    const x = storeWith({ a: makeNote('a', 200, 'text', 1, '123') }, { b: NOW - DAY_MS });
+    expect(merge(x, x, NOW)).toEqual(x);
+  });
+
+  it('is commutative and idempotent with userIds across random stores', () => {
+    function lcg(seed: number): () => number {
+      let state = seed >>> 0;
+      return () => {
+        state = (state * 1664525 + 1013904223) >>> 0;
+        return state / 4294967296;
+      };
+    }
+    const ids: (string | undefined)[] = [undefined, '111', '222'];
+    function randomStore(rand: () => number): StoreV2 {
+      const notes: Record<string, NoteRecord> = {};
+      for (const handle of ['a', 'b', 'c']) {
+        const text = `t${Math.floor(rand() * 4)}`;
+        const updatedAt = 1 + Math.floor(rand() * 1000);
+        const userId = ids[Math.floor(rand() * ids.length)];
+        notes[handle] = makeNote(handle, updatedAt, text, 1, userId);
+      }
+      return storeWith(notes, {});
+    }
+    for (let seed = 1; seed <= 50; seed++) {
+      const a = randomStore(lcg(seed));
+      const b = randomStore(lcg(seed * 7919 + 13));
+      expect(merge(a, b, NOW), `commutative seed ${seed}`).toEqual(merge(b, a, NOW));
+      expect(merge(a, a, NOW), `idempotent seed ${seed}`).toEqual(a);
+    }
   });
 });
 

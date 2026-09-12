@@ -228,4 +228,32 @@ describe('createPanel', () => {
     await flush();
     expect(panel.root.querySelector('.xn-note-text')).toBeNull();
   });
+
+  it('shows the formerly-known-handle hint in view mode after a rename', async () => {
+    const panel = createPanel('newhandle', makeHooks(makeNote('newhandle', 'moved note', 'teal')), {
+      formerHandle: 'oldhandle',
+    });
+    await flush();
+    expect(panel.root.querySelector('.xn-note-text')?.textContent).toBe('moved note');
+    expect(panel.root.querySelector('.xn-former-handle')?.textContent).toContain('oldhandle');
+  });
+
+  it('shows no hint without a rename', async () => {
+    const panel = createPanel('jack', makeHooks(makeNote('jack', 'direct', null)));
+    await flush();
+    expect(panel.root.querySelector('.xn-former-handle')).toBeNull();
+    const same = createPanel('jack', makeHooks(makeNote('jack', 'direct', null)), {
+      formerHandle: 'JACK',
+    });
+    await flush();
+    expect(same.root.querySelector('.xn-former-handle')).toBeNull();
+  });
+
+  it('renders the empty state when a withheld note arrives as null', async () => {
+    const panel = createPanel('victim', makeHooks(null));
+    await flush();
+    expect(panel.root.querySelector('button.xn-add')).not.toBeNull();
+    expect(panel.root.querySelector('.xn-note-text')).toBeNull();
+    expect(panel.root.querySelector('textarea')).toBeNull();
+  });
 });

@@ -13,6 +13,7 @@ export function canonicalNote(n: NoteRecord): string {
     handleLower: n.handleLower,
     text: n.text,
     updatedAt: n.updatedAt,
+    userId: n.userId ?? null,
   });
 }
 

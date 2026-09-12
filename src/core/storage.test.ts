@@ -9,6 +9,8 @@ import {
   getStore,
   getSyncState,
   getView,
+  reassignNote,
+  saveAliases,
   saveSettings,
   saveStore,
   saveSyncState,
@@ -240,6 +242,90 @@ describe('deleteNote', () => {
   });
 });
 
+describe('reassignNote', () => {
+  it('moves content, preserves createdAt, advances updatedAt, tombstones source in one write', async () => {
+    await upsertNote('old', 'hello', 'red', 100);
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set');
+    expect(await reassignNote('old', 'New', 200)).toBe('moved');
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['old']).toBeUndefined();
+    expect(store.tombstones['old']).toBe(200);
+    expect(store.notes['new']).toEqual({
+      handle: 'New',
+      handleLower: 'new',
+      text: 'hello',
+      color: 'red',
+      createdAt: 100,
+      updatedAt: 200,
+    });
+  });
+
+  it('refuses a populated target without writing', async () => {
+    await upsertNote('old', 'orphan', null, 100);
+    await upsertNote('taken', 'kept', 'red', 150, '123');
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set');
+    expect(await reassignNote('old', 'TAKEN', 200)).toBe('target-occupied');
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['taken']).toEqual({
+      handle: 'taken',
+      handleLower: 'taken',
+      text: 'kept',
+      color: 'red',
+      createdAt: 150,
+      updatedAt: 150,
+      userId: '123',
+    });
+    expect(store.notes['old']?.text).toBe('orphan');
+    expect(store.tombstones['old']).toBeUndefined();
+  });
+
+  it('returns nothing-to-move when the source holds no note', async () => {
+    await upsertNote('other', 'hi', null, 100);
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set');
+    expect(await reassignNote('ghost', 'new', 200)).toBe('nothing-to-move');
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['new']).toBeUndefined();
+    expect(store.notes['other']?.text).toBe('hi');
+  });
+
+  it('stamps the recorded alias ID for the target, never the orphan stale ID', async () => {
+    await saveAliases({ bob: { userId: '123', observedAt: 50 } });
+    await upsertNote('old', 'hello', null, 100, '999');
+    expect(await reassignNote('old', 'bob', 200)).toBe('moved');
+    expect((await getStore()).notes['bob']?.userId).toBe('123');
+  });
+
+  it('omits userId when no alias is recorded for the target', async () => {
+    await upsertNote('old', 'hello', null, 100, '999');
+    expect(await reassignNote('old', 'fresh', 200)).toBe('moved');
+    expect((await getStore()).notes['fresh']?.userId).toBeUndefined();
+  });
+
+  it('returns nothing-to-move for invalid or identical handles', async () => {
+    await upsertNote('jack', 'hi', null, 100);
+    for (const [source, target] of [
+      ['', 'new'],
+      ['   ', 'new'],
+      ['@', 'new'],
+      ['jack', ''],
+      ['jack', 'JACK'],
+      ['@jack', 'jack'],
+      ['jack', 'jack'],
+    ] as const) {
+      expect(await reassignNote(source, target, 200)).toBe('nothing-to-move');
+    }
+    const store = await getStore();
+    expect(store.notes['jack']?.text).toBe('hi');
+    expect(store.tombstones['jack']).toBeUndefined();
+  });
+});
+
 describe('subscribeToStoreChanges', () => {
   it('fires on store writes and stops after unsubscribe', async () => {
     const cb = vi.fn();
@@ -345,6 +431,33 @@ describe('rejected storage writes', () => {
     });
     await expect(saveStore(emptyStore())).rejects.toBeInstanceOf(StorageWriteError);
     spy.mockRestore();
+  });
+});
+
+describe('userId', () => {
+  it('keeps valid digits-only userIds and drops invalid ones', () => {
+    expect(toNoteRecord({ handle: 'jack', text: 'hi', userId: '123' })?.userId).toBe('123');
+    expect(toNoteRecord({ handle: 'jack', text: 'hi', userId: 'abc' })?.userId).toBeUndefined();
+    expect(toNoteRecord({ handle: 'jack', text: 'hi', userId: '12a' })?.userId).toBeUndefined();
+    expect(toNoteRecord({ handle: 'jack', text: 'hi', userId: 42 })?.userId).toBeUndefined();
+    expect(toNoteRecord({ handle: 'jack', text: 'hi' })?.userId).toBeUndefined();
+  });
+
+  it('round-trips userId through storage', async () => {
+    await upsertNote('jack', 'hi', null, 100, '123');
+    expect((await getStore()).notes['jack']?.userId).toBe('123');
+  });
+
+  it('attaches a valid userId and preserves the existing one on edits', async () => {
+    await upsertNote('jack', 'v1', null, 100, '123');
+    await upsertNote('jack', 'v2', 'red', 200);
+    const note = (await getStore()).notes['jack'];
+    expect(note?.text).toBe('v2');
+    expect(note?.userId).toBe('123');
+    await upsertNote('jack', 'v3', null, 300, 'not-digits');
+    expect((await getStore()).notes['jack']?.userId).toBe('123');
+    await upsertNote('bob', 'hi', null, 100, 'abc');
+    expect((await getStore()).notes['bob']?.userId).toBeUndefined();
   });
 });
 
