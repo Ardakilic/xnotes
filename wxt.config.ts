@@ -31,8 +31,16 @@ export default defineConfig({
           },
           action: {
             theme_icons: [
-              { light: 'icons/icon-16-light.png', dark: 'icons/icon-16-dark.png', size: 16 },
-              { light: 'icons/icon-32-light.png', dark: 'icons/icon-32-dark.png', size: 32 },
+              {
+                light: 'icons/icon-16-dark.png',
+                dark: 'icons/icon-16-light.png',
+                size: 16,
+              },
+              {
+                light: 'icons/icon-32-dark.png',
+                dark: 'icons/icon-32-light.png',
+                size: 32,
+              },
             ],
           },
         }

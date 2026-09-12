@@ -188,7 +188,7 @@ const darkThemeSource =
       : dark;
 const lightThemeSource = darkThemeSource === light ? dark : light;
 console.log(
-  `Decision: ${darkThemeSource === dark ? 'logo-dark.png (dark tile, bright glyph -> reads on dark UI)' : 'logo-light.png'} is the dark-theme icon (theme_icons.dark, icon-*-dark.png); ${lightThemeSource === light ? 'logo-light.png (dark-ink lineart -> reads on light UI)' : 'logo-dark.png'} is the light-theme icon (theme_icons.light, icon-*-light.png) and the default manifest icons set`,
+  `Decision: ${darkThemeSource === dark ? 'logo-dark.png (dark tile, bright glyph -> reads on dark UI)' : 'logo-light.png'} is the dark-theme icon (icon-*-dark.png, wired to theme_icons.light — that key shows on light-text/dark themes); ${lightThemeSource === light ? 'logo-light.png (dark-ink lineart -> reads on light UI)' : 'logo-dark.png'} is the light-theme icon (icon-*-light.png, wired to theme_icons.dark — shows on dark-text/light themes) and the default manifest icons set`,
 );
 
 mkdirSync(join(root, 'public/icons'), { recursive: true });
