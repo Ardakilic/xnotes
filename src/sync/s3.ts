@@ -29,7 +29,9 @@ export class S3Adapter implements SyncAdapter {
   }
 
   async probe(): Promise<void> {
-    const res = await this.send(() => this.client.fetch(this.bucketUrl, { method: 'HEAD' }));
+    const res = await this.send(() =>
+      this.client.fetch(this.bucketUrl, { method: 'HEAD', redirect: 'error' }),
+    );
     if (res.status === 403) throw new SyncAuthError('S3 authentication failed');
     if (res.status === 404) throw new SyncUnreachableError('bucket not found');
     if (res.status === 200) return;
@@ -40,7 +42,7 @@ export class S3Adapter implements SyncAdapter {
     const headers = new Headers();
     if (opts?.ifNoneMatch) headers.set('If-None-Match', quoteEtag(opts.ifNoneMatch));
     const res = await this.send(() =>
-      this.client.fetch(this.objectUrl, { method: 'GET', headers }),
+      this.client.fetch(this.objectUrl, { method: 'GET', headers, redirect: 'error' }),
     );
     if (res.status === 304) return { kind: 'not-modified' };
     if (res.status === 404) return { kind: 'not-found' };
@@ -65,7 +67,7 @@ export class S3Adapter implements SyncAdapter {
     // ponytail: copy so TS sees an ArrayBuffer-backed view for BodyInit
     const body = new Uint8Array(data);
     const res = await this.send(() =>
-      this.client.fetch(this.objectUrl, { method: 'PUT', headers, body }),
+      this.client.fetch(this.objectUrl, { method: 'PUT', headers, body, redirect: 'error' }),
     );
     if (res.status === 412) throw new SyncConflictError('S3 conditional PUT conflict');
     if (res.status === 501) return this.fallback(data, opts);
@@ -85,7 +87,9 @@ export class S3Adapter implements SyncAdapter {
   }
 
   private async putWithHeadCompare(data: Uint8Array, opts?: PutOptions): Promise<{ etag: string }> {
-    const head = await this.send(() => this.client.fetch(this.objectUrl, { method: 'HEAD' }));
+    const head = await this.send(() =>
+      this.client.fetch(this.objectUrl, { method: 'HEAD', redirect: 'error' }),
+    );
     if (head.status === 403) throw new SyncAuthError('S3 authentication failed');
     if (opts?.ifNoneMatch === '*') {
       if (head.ok) throw new SyncConflictError('remote blob already exists');
@@ -101,7 +105,9 @@ export class S3Adapter implements SyncAdapter {
     }
     // ponytail: copy so TS sees an ArrayBuffer-backed view for BodyInit
     const body = new Uint8Array(data);
-    const res = await this.send(() => this.client.fetch(this.objectUrl, { method: 'PUT', body }));
+    const res = await this.send(() =>
+      this.client.fetch(this.objectUrl, { method: 'PUT', body, redirect: 'error' }),
+    );
     if (res.status === 403) throw new SyncAuthError('S3 authentication failed');
     if (!res.ok) throw new SyncUnreachableError(`S3 PUT failed: ${res.status}`);
     return { etag: stripQuotes(res.headers.get('etag') ?? '') };
@@ -109,8 +115,9 @@ export class S3Adapter implements SyncAdapter {
 
   private async send(run: () => Promise<Response>): Promise<Response> {
     try {
-      // ponytail: no redirect check — SigV4 signatures are host-bound, so a redirected
-      // request cannot carry valid credentials to the redirect target
+      // ponytail: redirect:'error' travels in each fetch init — a followed 307/308 would
+      // re-send the PUT body to the redirect target (CWE-441) before any post-hoc
+      // check could run; SigV4 being host-bound only protects the credentials, not the body
       return await run();
     } catch {
       throw new SyncUnreachableError('cannot reach S3 endpoint');

@@ -208,25 +208,17 @@ describe('put', () => {
 describe('redirect handling', () => {
   const body = new TextEncoder().encode('{"v":1}');
 
-  function redirectedResponse(url: string): Response {
-    const res = new Response(null, { status: 200, headers: { etag: '"v2"' } });
-    Object.defineProperty(res, 'redirected', { value: true });
-    Object.defineProperty(res, 'url', { value: url });
-    return res;
-  }
-
-  it('refuses a redirect to an insecure http endpoint', async () => {
-    fetchMock.mockResolvedValueOnce(redirectedResponse('http://evil.example.com/x'));
-    const promise = new WebdavAdapter(settings).put(body);
-    await expect(promise).rejects.toThrow(SyncUnreachableError);
-    await expect(promise).rejects.toThrow('insecure');
+  it('refuses redirects: fetch is called with redirect error mode', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: '"v2"' } }));
+    await new WebdavAdapter(settings).put(body);
+    expect(call(0).init.redirect).toBe('error');
   });
 
-  it('allows a redirect that stays on https', async () => {
-    fetchMock.mockResolvedValueOnce(
-      redirectedResponse('https://dav.example.com/xnotes/notes.json/'),
-    );
-    await expect(new WebdavAdapter(settings).put(body)).resolves.toEqual({ etag: '"v2"' });
+  it('surfaces a rejected redirect as SyncUnreachableError', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const promise = new WebdavAdapter(settings).put(body);
+    await expect(promise).rejects.toThrow(SyncUnreachableError);
+    await expect(promise).rejects.toThrow('redirects are refused');
   });
 });
 

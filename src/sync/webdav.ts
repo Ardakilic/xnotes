@@ -128,18 +128,15 @@ export class WebdavAdapter implements SyncAdapter {
   ): Promise<Response> {
     const headers = new Headers(extraHeaders);
     headers.set('Authorization', this.auth);
-    const init: RequestInit = { method, headers };
+    const init: RequestInit = { method, headers, redirect: 'error' };
     // ponytail: copy so TS sees an ArrayBuffer-backed view for BodyInit
     if (body) init.body = new Uint8Array(body);
-    let res: Response;
     try {
-      res = await fetch(url, init);
+      return await fetch(url, init);
     } catch {
-      throw new SyncUnreachableError(`cannot reach WebDAV endpoint at ${url}`);
+      throw new SyncUnreachableError(
+        `cannot reach WebDAV endpoint at ${url} (or it redirects — redirects are refused)`,
+      );
     }
-    if (res.redirected && !res.url.startsWith('https:')) {
-      throw new SyncUnreachableError(`refused redirect to insecure http endpoint (${res.url})`);
-    }
-    return res;
   }
 }
