@@ -85,9 +85,16 @@ function findNotedLink(
 
 const HOVER_STYLE = `
 .xn-hover-note {
-  padding: 4px 8px;
-  font-size: 13px;
+  box-sizing: border-box;
+  max-width: 260px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--xn-hover-bg, rgba(15, 20, 25, 0.05));
+  color: var(--xn-hover-fg, #536471);
+  font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 `;
 
@@ -99,6 +106,7 @@ export function injectHoverCardNote(doc: Document, notes: Record<string, NoteRec
     if (note === null) return;
     const host = doc.createElement('div');
     host.setAttribute('data-xn-hover', '');
+    host.style.cssText = 'display:block;padding:0 16px 12px;';
     const root = host.attachShadow({ mode: 'closed' });
     const style = doc.createElement('style');
     style.textContent = HOVER_STYLE;

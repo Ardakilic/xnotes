@@ -101,6 +101,18 @@ describe('injectHoverCardNote', () => {
     expect(document.querySelectorAll('div[data-xn-hover]').length).toBe(1);
   });
 
+  it('insets the host inside the card padding so the note clears the border', () => {
+    document.body.innerHTML =
+      '<div data-testid="HoverCard"><a href="https://x.com/jack">Jack</a></div>';
+    injectHoverCardNote(document, { jack: makeNote('jack', null) });
+    const host = document.querySelector('div[data-xn-hover]');
+    expect(host).not.toBeNull();
+    if (host instanceof HTMLElement) {
+      expect(host.style.display).toBe('block');
+      expect(host.style.padding).toBe('0px 16px 12px');
+    }
+  });
+
   it('skips hover cards without a noted profile link', () => {
     document.body.innerHTML =
       '<div data-testid="HoverCard"><a href="https://x.com/home">Home</a></div>';
