@@ -348,6 +348,33 @@ describe('rejected storage writes', () => {
   });
 });
 
+describe('userId', () => {
+  it('keeps valid digits-only userIds and drops invalid ones', () => {
+    expect(toNoteRecord({ handle: 'jack', text: 'hi', userId: '123' })?.userId).toBe('123');
+    expect(toNoteRecord({ handle: 'jack', text: 'hi', userId: 'abc' })?.userId).toBeUndefined();
+    expect(toNoteRecord({ handle: 'jack', text: 'hi', userId: '12a' })?.userId).toBeUndefined();
+    expect(toNoteRecord({ handle: 'jack', text: 'hi', userId: 42 })?.userId).toBeUndefined();
+    expect(toNoteRecord({ handle: 'jack', text: 'hi' })?.userId).toBeUndefined();
+  });
+
+  it('round-trips userId through storage', async () => {
+    await upsertNote('jack', 'hi', null, 100, '123');
+    expect((await getStore()).notes['jack']?.userId).toBe('123');
+  });
+
+  it('attaches a valid userId and preserves the existing one on edits', async () => {
+    await upsertNote('jack', 'v1', null, 100, '123');
+    await upsertNote('jack', 'v2', 'red', 200);
+    const note = (await getStore()).notes['jack'];
+    expect(note?.text).toBe('v2');
+    expect(note?.userId).toBe('123');
+    await upsertNote('jack', 'v3', null, 300, 'not-digits');
+    expect((await getStore()).notes['jack']?.userId).toBe('123');
+    await upsertNote('bob', 'hi', null, 100, 'abc');
+    expect((await getStore()).notes['bob']?.userId).toBeUndefined();
+  });
+});
+
 describe('local-only keys', () => {
   it('round-trip sync state with safe defaults', async () => {
     expect(await getSyncState()).toEqual({

@@ -66,6 +66,20 @@ describe('WebDAV adapter against real dufs', () => {
     }
   });
 
+  it('round-trips a note carrying userId', async () => {
+    const adapter = makeAdapter('/userid/notes.json');
+    const origin = store('alice', 1000);
+    const note = origin.notes['alice'];
+    if (note === undefined) throw new Error('fixture missing');
+    note.userId = '12345';
+    await adapter.put(encode(origin));
+    const got = await adapter.get();
+    expect(got.kind).toBe('found');
+    if (got.kind === 'found') {
+      expect(decode(got.data).notes['alice']?.userId).toBe('12345');
+    }
+  });
+
   it('creates the folder via MKCOL on first run', async () => {
     const adapter = makeAdapter(`/mkcol-${Date.now()}/notes.json`);
     const { etag } = await adapter.put(encode(store('bob', 2000)));

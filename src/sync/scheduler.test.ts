@@ -22,7 +22,9 @@ import {
   backoffMinutes,
   BACKOFF_ALARM,
   clearStaleSyncingStatus,
+  encodeStore,
   forceNextPush,
+  hashStore,
   initScheduler,
   isPassphraseSet,
   runCycle,
@@ -257,6 +259,35 @@ describe('conflict retry', () => {
     expect(fake.puts).toHaveLength(2);
     const pushed = toStoreV2(JSON.parse(new TextDecoder().decode(fake.puts[1]!.bytes)));
     expect(pushed?.notes['jack']?.text).toBe('v2');
+  });
+});
+
+describe('userId in sync bytes', () => {
+  it('changes encodeStore bytes deterministically and hashes stably', async () => {
+    const plain = note('jack', 9000);
+    const withId: StoreV2 = {
+      schemaVersion: 2,
+      notes: {
+        jack: {
+          handle: 'jack',
+          handleLower: 'jack',
+          text: 'text of jack',
+          color: null,
+          createdAt: 8000,
+          updatedAt: 9000,
+          userId: '123',
+        },
+      },
+      tombstones: {},
+    };
+    const plainText = new TextDecoder().decode(encodeStore(plain));
+    const idText = new TextDecoder().decode(encodeStore(withId));
+    expect(idText).toContain('123');
+    expect(plainText).not.toContain('123');
+    expect(idText).not.toBe(plainText);
+    expect(new TextDecoder().decode(encodeStore(withId))).toBe(idText);
+    expect(await hashStore(plain)).toBe(await hashStore(plain));
+    expect(await hashStore(withId)).not.toBe(await hashStore(plain));
   });
 });
 

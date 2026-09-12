@@ -15,9 +15,30 @@ export interface Panel {
   isEditing(): boolean;
 }
 
+/**
+ * Optional display context for the panel. `formerHandle` names the
+ * previously-known handle a renamed note was moved from, if any.
+ */
+export interface PanelOptions {
+  formerHandle?: string | null;
+}
+
 type Mode = 'empty' | 'view' | 'edit';
 
-export function createPanel(handle: string, hooks: PanelHooks): Panel {
+/**
+ * Create the profile note panel for `handle`. Withholding needs no panel
+ * logic: a withheld note arrives as `null` from the hooks and renders the
+ * empty state. When `options.formerHandle` is set, view mode shows a
+ * formerly-known-handle hint under the title.
+ */
+export function createPanel(handle: string, hooks: PanelHooks, options?: PanelOptions): Panel {
+  const formerHandle =
+    options?.formerHandle !== undefined &&
+    options.formerHandle !== null &&
+    options.formerHandle !== '' &&
+    options.formerHandle.toLowerCase() !== handle.toLowerCase()
+      ? options.formerHandle
+      : null;
   const root = document.createElement('div');
   root.className = 'xn-panel';
   root.setAttribute('aria-label', `xNotes panel for @${handle}`);
@@ -87,6 +108,7 @@ export function createPanel(handle: string, hooks: PanelHooks): Panel {
     );
   }
 
+  /** Render view mode, prepending the formerly-known-handle hint when set. */
   function renderView(note: NoteRecord): void {
     mode = 'view';
     clearAccent();
@@ -100,7 +122,14 @@ export function createPanel(handle: string, hooks: PanelHooks): Panel {
       button('Edit', 'xn-edit', () => renderEdit(note)),
       managerLink(),
     );
-    body.replaceChildren(text, actions);
+    if (formerHandle === null) {
+      body.replaceChildren(text, actions);
+      return;
+    }
+    const hint = document.createElement('div');
+    hint.className = 'xn-former-handle';
+    hint.textContent = `Previously @${formerHandle}`;
+    body.replaceChildren(hint, text, actions);
   }
 
   function renderEdit(note: NoteRecord | null): void {

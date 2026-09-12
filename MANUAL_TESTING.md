@@ -66,3 +66,23 @@ Regression for screenshot-3 (note rendered as raw unstyled text flush against th
 - [ ] Same check with X in dark theme → pill uses the dark variant, readable, no white-on-white
 - [ ] Long note with no spaces → wraps inside the pill (`overflow-wrap`), never overflows the card width
 - [ ] Shadow-DOM isolation still holds (DevTools console: note text absent from light DOM, cf. the isolation item in §1)
+
+## 8. Stable user ID learning (persist-x-user-id open questions)
+
+Live-browser verification for the three design open questions (§design Open Questions).
+Setup: load a dev build, add a note on a public profile, run in DevTools console on the
+profile page: `document.querySelectorAll('script[type="application/ld+json"]')` and inspect
+`mainEntity.identifier` vs the URL handle.
+
+- [ ] JSON-LD SPA-refresh staleness: navigate profile A → profile B via in-page links (pushState,
+      no reload) → check whether the JSON-LD block still carries A's handle/ID (stale head) and how
+      often the cross-check discards the read; record hit rate here
+- [ ] Protected / suspended / logged-out identifier + banner presence: visit a protected profile,
+      a suspended profile, and any profile logged-out → record for each whether the JSON-LD
+      identifier and the `/profile_banners/(\d+)/` image are present or absent
+- [ ] Logged-out hover reachability: logged-out, hover a timeline avatar → record whether the
+      hover card renders at all (current design keeps hover handle-only regardless)
+- [ ] Rename end-to-end: note profile A (learns ID), have A change handle to B (or simulate via
+      local alias edit) → visit B → note follows with a "Previously @A" hint; old key tombstoned
+- [ ] Hijack end-to-end: note handle H (ID A learned), H is taken by a new owner (ID B) → visit H
+      → panel shows the empty state (no old text/color leak); manager lists the orphan for review

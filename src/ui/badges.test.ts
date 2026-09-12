@@ -120,3 +120,19 @@ describe('injectHoverCardNote', () => {
     expect(document.querySelectorAll('div[data-xn-hover]').length).toBe(0);
   });
 });
+
+describe('notes carrying userId', () => {
+  it('badges and hover-injects without exposing the userId', () => {
+    document.body.innerHTML = '<div data-testid="UserAvatar-Container-jack"></div>';
+    const notes = { jack: { ...makeNote('jack', 'teal'), userId: '123' } };
+    decorateAvatars(document, notes, null);
+    expect(
+      document.querySelector('[data-testid="UserAvatar-Container-jack"] span[data-xn-shadow]'),
+    ).not.toBeNull();
+    expect(document.body.textContent).not.toContain('123');
+    document.body.innerHTML =
+      '<div data-testid="HoverCard"><a href="https://x.com/jack">Jack</a></div>';
+    injectHoverCardNote(document, notes);
+    expect(document.querySelectorAll('div[data-xn-hover]').length).toBe(1);
+  });
+});

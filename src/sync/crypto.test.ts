@@ -52,6 +52,30 @@ describe('crypto', () => {
   );
 
   it(
+    'round-trips a store carrying userId',
+    async () => {
+      const withId: StoreV2 = {
+        schemaVersion: 2,
+        notes: {
+          alice: {
+            handle: 'Alice',
+            handleLower: 'alice',
+            text: 'hello @bob',
+            color: 'teal',
+            createdAt: 1700000000000,
+            updatedAt: 1700000000001,
+            userId: '12345',
+          },
+        },
+        tombstones: { bob: 1700000000002 },
+      };
+      const bytes = await encryptStore(withId, 'correct horse');
+      await expect(decryptStore(bytes, 'correct horse')).resolves.toEqual(withId);
+    },
+    T,
+  );
+
+  it(
     'uses fresh salt, iv, and ciphertext per encryption',
     async () => {
       const a = JSON.parse(new TextDecoder().decode(await encryptStore(store, 'pw')));

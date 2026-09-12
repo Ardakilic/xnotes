@@ -1,5 +1,9 @@
 import type { ColorKey } from './colors';
 
+/**
+ * A private note attached to an X profile. Keys stay `handleLower`; `userId`
+ * is additive confidence (absent = unknown) for rename vs. reuse decisions.
+ */
 export interface NoteRecord {
   handle: string;
   handleLower: string;
@@ -7,6 +11,8 @@ export interface NoteRecord {
   color: ColorKey | null;
   createdAt: number;
   updatedAt: number;
+  /** Stable numeric X user ID (`rest_id`, digits-only `^\d+$`); absent = unknown. */
+  userId?: string;
 }
 
 export interface StoreV2 {

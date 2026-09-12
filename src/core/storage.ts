@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import { emptyAliases, toAliasStore, type AliasStore } from './aliases';
 import { isColorKey, type ColorKey } from './colors';
 import {
   DEFAULT_SETTINGS,
@@ -15,6 +16,7 @@ export const STORE_KEY = 'xnotes:store';
 export const SYNC_STATE_KEY = 'xnotes:sync-state';
 export const SETTINGS_KEY = 'xnotes:settings';
 export const VIEW_KEY = 'xnotes:view';
+export const ALIASES_KEY = 'xnotes:aliases';
 export const CORRUPT_PREFIX = 'xnotes:corrupt-';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -78,6 +80,11 @@ async function safeRemove(key: string): Promise<void> {
   }
 }
 
+/**
+ * Validate-by-construction parser for a stored note. Rebuilds a valid
+ * `NoteRecord` from `unknown`, coercing or dropping invalid fields; a
+ * `userId` is kept only when it is a digits-only string, else omitted.
+ */
 export function toNoteRecord(value: unknown, keyFallback?: string): NoteRecord | null {
   if (!isRecord(value)) return null;
   const rawHandle = value['handle'];
@@ -101,6 +108,10 @@ export function toNoteRecord(value: unknown, keyFallback?: string): NoteRecord |
   const updatedAt =
     typeof rawUpdatedAt === 'number' && Number.isFinite(rawUpdatedAt) ? rawUpdatedAt : createdAt;
   const color = isColorKey(value['color']) ? value['color'] : null;
+  const rawUserId = value['userId'];
+  if (typeof rawUserId === 'string' && /^\d+$/.test(rawUserId)) {
+    return { handle, handleLower, text, color, createdAt, updatedAt, userId: rawUserId };
+  }
   return { handle, handleLower, text, color, createdAt, updatedAt };
 }
 
@@ -158,11 +169,18 @@ function normalizeHandle(handle: string): string {
   return handle.trim().replace(/^@/, '').trim();
 }
 
+/**
+ * Create or update the note under `handle` (whitespace-only text deletes).
+ * A digits-only `userId` attaches the stable X user ID to the note; when
+ * omitted or invalid the existing note's ID is preserved so edits never
+ * strip learned identity. The empty-text delete path is unchanged.
+ */
 export async function upsertNote(
   handle: string,
   text: string,
   color: ColorKey | null,
   now?: number,
+  userId?: string,
 ): Promise<void> {
   const normalized = normalizeHandle(handle);
   if (normalized === '') return;
@@ -180,7 +198,7 @@ export async function upsertNote(
     }
     return;
   }
-  store.notes[handleLower] = {
+  const next: NoteRecord = {
     handle: normalized,
     handleLower,
     text,
@@ -188,6 +206,12 @@ export async function upsertNote(
     createdAt: existing !== undefined ? existing.createdAt : timestamp,
     updatedAt: timestamp,
   };
+  if (typeof userId === 'string' && /^\d+$/.test(userId)) {
+    next.userId = userId;
+  } else if (existing?.userId !== undefined) {
+    next.userId = existing.userId;
+  }
+  store.notes[handleLower] = next;
   delete store.tombstones[handleLower];
   await saveStore(store);
 }
@@ -317,4 +341,22 @@ export async function getView(): Promise<ManagerView> {
 
 export async function saveView(view: ManagerView): Promise<void> {
   await safeWrite(VIEW_KEY, view);
+}
+
+/**
+ * Read the local-only learned handle→userId alias store. Fail-soft: any
+ * storage error or invalid blob yields an empty store. Never synced.
+ */
+export async function getAliases(): Promise<AliasStore> {
+  const raw = await safeRead(ALIASES_KEY);
+  if (!raw.ok || raw.value === undefined) return emptyAliases();
+  return toAliasStore(raw.value) ?? emptyAliases();
+}
+
+/**
+ * Persist the local-only learned handle→userId alias store. Fail-soft like
+ * other bookkeeping keys; never part of the synced `StoreV2` blob.
+ */
+export async function saveAliases(store: AliasStore): Promise<void> {
+  await safeWrite(ALIASES_KEY, store);
 }
