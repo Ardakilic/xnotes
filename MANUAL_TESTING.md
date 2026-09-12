@@ -57,3 +57,12 @@ Walk every manually-verifiable scenario of the delta specs in both engines; reco
 
 - [x] `make dev` publishes port 3000 — load `.output/chrome-mv3` as unpacked, edit a source file, confirm the extension rebuilds and the host browser receives the update — passed 2026-09-12
 - [x] `make dev-firefox` publishes port 3001 — load `.output/firefox-mv3` in Firefox, edit a source file, confirm HMR reaches the host browser — passed 2026-09-12
+
+## 7. Hover-card note restyle (fix/hover-card-note-render)
+
+Regression for screenshot-3 (note rendered as raw unstyled text flush against the hover card's bottom border, descenders clipped).
+
+- [ ] Hover a noted profile on x.com (light theme) → note renders as a padded muted pill inside the card, clear of the rounded border
+- [ ] Same check with X in dark theme → pill uses the dark variant, readable, no white-on-white
+- [ ] Long note with no spaces → wraps inside the pill (`overflow-wrap`), never overflows the card width
+- [ ] Shadow-DOM isolation still holds (DevTools console: note text absent from light DOM, cf. the isolation item in §1)

@@ -190,24 +190,12 @@
   pointer-events: none;
 }
 
-.xn-hover-note {
-  max-width: 260px;
-  margin-top: 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(15, 20, 25, 0.05);
-  color: #536471;
-  font:
-    13px/1.4 system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+:root {
+  --xn-hover-bg: rgba(15, 20, 25, 0.05);
+  --xn-hover-fg: #536471;
 }
 
-.xn-dark .xn-hover-note {
-  background: rgba(231, 233, 234, 0.08);
-  color: #8b98a5;
+.xn-dark {
+  --xn-hover-bg: rgba(231, 233, 234, 0.08);
+  --xn-hover-fg: #8b98a5;
 }
