@@ -47,6 +47,9 @@ async function handle(msg: BackgroundRequest): Promise<BackgroundResponse> {
       await rescheduleAlarm();
       await runCycle();
       return { ok: true };
+    case 'open-options':
+      await browser.runtime.openOptionsPage();
+      return { ok: true };
   }
 }
 

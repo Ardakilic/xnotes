@@ -4,7 +4,7 @@ Reference material for the implementer: `x-notes-sync-analysis-and-plan.md` (rep
 
 ## 1. Scaffold & tooling (Phase 0)
 
-- [x] 1.1 `wxt init` a TypeScript project named xnotes; pin the exact WXT version in package.json; configure `wxt.config.ts` (name, manifest base: `permissions: ["storage", "alarms"]`, `host_permissions` for x.com/twitter.com, `optional_host_permissions: ["*://*/*"]`, icons, `browser_specific_settings.gecko` with an id and `strict_min_version: 121`)
+- [x] 1.1 `wxt init` a TypeScript project named xnotes; pin the exact WXT version in package.json; configure `wxt.config.ts` (name, manifest base: `permissions: ["storage", "alarms"]`, `host_permissions` for x.com/twitter.com, `optional_host_permissions: ["https://*/*"]` (sync endpoints are HTTPS-only; originally `["*://*/*"]`, narrowed), icons, `browser_specific_settings.gecko` with an id and `strict_min_version: 142` (bumped from 121: `optional_host_permissions` needs ≥128, `data_collection_permissions` ≥140 desktop / ≥142 Android, and without `gecko_android` the gecko floor governs both — web-ext lint demands 142 for zero warnings))
 - [x] 1.2 Set tsconfig to the strict set from design D1 (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `noUnusedLocals`, `noUnusedParameters`, `isolatedModules`, `verbatimModuleSyntax`)
 - [x] 1.3 Add ESLint + Prettier, including a rule (or lint check) forbidding direct `chrome.*` usage in `src/` and `entrypoints/`
 - [x] 1.4 Add Vitest with the `WxtVitest()` plugin (`vitest.config.ts`); add npm scripts: `test`, `typecheck`, `lint`, `build`, `build:firefox`, `zip`, `zip:firefox`, `postinstall: wxt prepare`

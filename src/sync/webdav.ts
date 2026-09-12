@@ -131,10 +131,15 @@ export class WebdavAdapter implements SyncAdapter {
     const init: RequestInit = { method, headers };
     // ponytail: copy so TS sees an ArrayBuffer-backed view for BodyInit
     if (body) init.body = new Uint8Array(body);
+    let res: Response;
     try {
-      return await fetch(url, init);
+      res = await fetch(url, init);
     } catch {
       throw new SyncUnreachableError(`cannot reach WebDAV endpoint at ${url}`);
     }
+    if (res.redirected && !res.url.startsWith('https:')) {
+      throw new SyncUnreachableError(`refused redirect to insecure http endpoint (${res.url})`);
+    }
+    return res;
   }
 }

@@ -109,6 +109,8 @@ export class S3Adapter implements SyncAdapter {
 
   private async send(run: () => Promise<Response>): Promise<Response> {
     try {
+      // ponytail: no redirect check — SigV4 signatures are host-bound, so a redirected
+      // request cannot carry valid credentials to the redirect target
       return await run();
     } catch {
       throw new SyncUnreachableError('cannot reach S3 endpoint');

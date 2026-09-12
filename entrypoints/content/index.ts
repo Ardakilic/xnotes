@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import { sendBackground } from '../../src/core/messages';
 import { parseProfile } from '../../src/core/profile';
 import { deleteNote, getStore, subscribeToStoreChanges, upsertNote } from '../../src/core/storage';
 import { isDarkBackground } from '../../src/core/theme';
@@ -66,7 +67,7 @@ export default defineContentScript({
         save: (text, color) => upsertNote(handle, text, color),
         remove: () => deleteNote(handle),
         openManager: () => {
-          window.open(browser.runtime.getURL('/options.html'), '_blank');
+          sendBackground({ type: 'open-options' }).catch(() => {});
         },
       };
     }

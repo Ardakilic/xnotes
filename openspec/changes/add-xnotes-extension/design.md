@@ -203,8 +203,8 @@ WebCrypto only (`crypto.subtle`, available in both engines' background contexts)
 
 - Code against WXT's `browser.*` promises; `chrome.*` never appears in source (lint-enforced).
 - Background written to service-worker constraints (strictest): all state in storage, listeners registered synchronously at top level, `alarms` instead of `setInterval`, no DOM assumptions → runs fine as Firefox event page.
-- Manifest: `permissions: ["storage", "alarms"]`; `host_permissions: ["https://x.com/*", "https://twitter.com/*"]`; `optional_host_permissions: ["*://*/*"]` (sync endpoints are arbitrary user origins, granted at runtime via `permissions.request` when sync settings are saved — must be inside a user gesture on both engines).
-- Firefox: `browser_specific_settings.gecko.id` + `strict_min_version` ≥ 121; distribution requires AMO signing (sources zip from `wxt zip -b firefox` + build README per AMO policy).
+- Manifest: `permissions: ["storage", "alarms"]`; `host_permissions: ["https://x.com/*", "https://twitter.com/*"]`; `optional_host_permissions: ["https://*/*"]` (sync endpoints are arbitrary user HTTPS origins — HTTP is rejected by validation — granted at runtime via `permissions.request` when sync settings are saved — must be inside a user gesture on both engines).
+- Firefox: `browser_specific_settings.gecko.id` + `strict_min_version` ≥ 142 (floor for the manifest keys used: `optional_host_permissions` needs 128, `data_collection_permissions` needs 140 on desktop / 142 on Android — without a `gecko_android` sub-key the gecko floor governs both); distribution requires AMO signing (sources zip from `wxt zip -b firefox` + build README per AMO policy).
 - Host permissions on **both** engines: Chrome MV3 requests x.com/twitter.com host permissions at install time, but users can restrict site access to "on click" or revoke it (user-controlled site access since Chrome 121); Firefox MV3 makes them opt-in/revocable → onboarding must check `permissions.contains` for the x.com/twitter.com origins and prompt via `permissions.request` on both engines, not just Firefox.
 - Chromium: same build loads on Brave/Helium/Edge/Vivaldi via CWS.
 

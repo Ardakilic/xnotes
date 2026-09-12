@@ -205,6 +205,31 @@ describe('put', () => {
   });
 });
 
+describe('redirect handling', () => {
+  const body = new TextEncoder().encode('{"v":1}');
+
+  function redirectedResponse(url: string): Response {
+    const res = new Response(null, { status: 200, headers: { etag: '"v2"' } });
+    Object.defineProperty(res, 'redirected', { value: true });
+    Object.defineProperty(res, 'url', { value: url });
+    return res;
+  }
+
+  it('refuses a redirect to an insecure http endpoint', async () => {
+    fetchMock.mockResolvedValueOnce(redirectedResponse('http://evil.example.com/x'));
+    const promise = new WebdavAdapter(settings).put(body);
+    await expect(promise).rejects.toThrow(SyncUnreachableError);
+    await expect(promise).rejects.toThrow('insecure');
+  });
+
+  it('allows a redirect that stays on https', async () => {
+    fetchMock.mockResolvedValueOnce(
+      redirectedResponse('https://dav.example.com/xnotes/notes.json/'),
+    );
+    await expect(new WebdavAdapter(settings).put(body)).resolves.toEqual({ etag: '"v2"' });
+  });
+});
+
 describe('url construction', () => {
   it('defaults the path and tolerates a trailing slash', async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
