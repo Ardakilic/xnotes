@@ -6,11 +6,12 @@ Everything a human must do manually to publish xNotes. Text blocks are paste-rea
 
 1. One-time $5 developer registration at <https://chrome.google.com/webstore/devconsole> (skip if already registered).
 2. Re-shoot screenshots at **exactly 1280x800** (or 640x400) — the current ones in `assets/screenshots/` are the wrong sizes and will be rejected. At minimum: the profile panel on x.com, and the all-notes manager.
-3. Publish PRIVACY.md at a public URL and enter it in the dashboard. Use the GitHub blob URL: <https://github.com/Ardakilic/xnotes/blob/main/PRIVACY.md> (verified via `git remote get-url origin`).
-4. Upload `.output/xnotes-0.1.0-chrome.zip`.
-5. Paste the dashboard texts (below): single purpose, permission justifications, short + detailed description.
-6. Answer the data-use disclosure (below) — all "No" except website-content reading on x.com/twitter.com.
-7. Submit for review.
+3. Create a small promotional tile at **440x280** (optional but recommended for store visibility) and upload it in the dashboard alongside the screenshots before submitting.
+4. Publish PRIVACY.md at a public URL and enter it in the dashboard. Use the GitHub blob URL: <https://github.com/Ardakilic/xnotes/blob/main/PRIVACY.md> (verified via `git remote get-url origin`).
+5. Upload `.output/xnotes-0.1.0-chrome.zip`.
+6. Paste the dashboard texts (below): single purpose, permission justifications, short + detailed description.
+7. Answer the data-use disclosure (below) — all "No" except website-content reading on x.com/twitter.com and authentication info (see note below).
+8. Submit for review.
 
 ## Firefox Add-ons (AMO)
 
@@ -39,7 +40,7 @@ Everything a human must do manually to publish xNotes. Text blocks are paste-rea
 - Does the extension collect or sell user data? **No.**
 - Does it transfer data to third parties? **No** — the only network requests go to the sync backend the user configures themselves.
 - Does it read website content? It reads the **profile handle on x.com/twitter.com pages only**.
-- Authentication info? **No.** User activity? **No.** Web history? **No.** Personally identifiable info? **No.**
+- Authentication info? **Yes** — if (and only if) the user configures sync, the backend's credentials (WebDAV username/password or S3 access keys) are stored locally in extension storage on the user's device so unattended sync works. They are never collected by the developer, never sent anywhere except the user's own configured backend, and never leave the device otherwise. User activity? **No.** Web history? **No.** Personally identifiable info? **No.**
 
 **Short description (CWS, ≤132 chars):**
 

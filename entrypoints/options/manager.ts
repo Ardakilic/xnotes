@@ -292,13 +292,13 @@ export function mountManager(root: HTMLElement): void {
 
   async function doDelete(note: NoteRecord): Promise<void> {
     if (!confirm(`Delete the note for @${note.handle}?`)) return;
-    if (editing !== null && editing.handleLower === note.handleLower) editing = null;
     try {
       await deleteNote(note.handle);
     } catch {
       alert('Could not delete — the note was not removed. Please try again.');
       return;
     }
+    if (editing !== null && editing.handleLower === note.handleLower) editing = null;
     await refresh();
   }
 

@@ -223,6 +223,33 @@ describe('delete', () => {
     });
   });
 
+  it('keeps open editors and drafts when a delete write fails', async () => {
+    stubConfirm([true]);
+    const alerts = stubAlert();
+    const root = await mount([
+      makeNote('jack', 'hello', null, 100),
+      makeNote('bob', 'world', null, 200),
+    ]);
+    button(rowWith(root, '@jack'), 'Edit').click();
+    await vi.waitFor(() => {
+      expect(root.querySelector('textarea.edit-text')).not.toBeNull();
+    });
+    const textarea = root.querySelector<HTMLTextAreaElement>('textarea.edit-text');
+    if (textarea === null) return;
+    textarea.value = 'unsaved draft';
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set').mockImplementation(() => {
+      throw new Error('QUOTA_BYTES quota exceeded');
+    });
+    button(rowWith(root, '@bob'), 'Delete').click();
+    await vi.waitFor(() => {
+      expect(alerts.some((m) => m.includes('Could not delete'))).toBe(true);
+    });
+    spy.mockRestore();
+    const survivor = root.querySelector<HTMLTextAreaElement>('textarea.edit-text');
+    expect(survivor?.value).toBe('unsaved draft');
+    expect((await getStore()).notes['bob']?.text).toBe('world');
+  });
+
   it('aborts when the confirmation is declined', async () => {
     stubConfirm([]);
     const root = await mount([makeNote('jack', 'hello', null, 100)]);
