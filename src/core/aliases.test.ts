@@ -85,17 +85,21 @@ describe('toAliasStore', () => {
 
 describe('alias storage round-trip', () => {
   it('saves and reads back through fakeBrowser', async () => {
-    expect(await getAliases()).toEqual({});
+    expect((await getAliases()).aliases).toEqual({});
+    expect((await getAliases()).ok).toBe(true);
     const next = recordObservation(emptyAliases(), 'jack', '123', 100);
     await saveAliases(next);
-    expect(await getAliases()).toEqual({ jack: { userId: '123', observedAt: 100 } });
+    expect(await getAliases()).toEqual({
+      aliases: { jack: { userId: '123', observedAt: 100 } },
+      ok: true,
+    });
   });
 
-  it('reads an empty store when the blob is invalid', async () => {
+  it('reads an empty store with ok:true when the blob is invalid', async () => {
     const store: AliasStore = Object.create(null);
     store['jack'] = { userId: 'not-digits', observedAt: 1 };
     await saveAliases(store);
-    expect(await getAliases()).toEqual({});
+    expect(await getAliases()).toEqual({ aliases: {}, ok: true });
   });
 });
 

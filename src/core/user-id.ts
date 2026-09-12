@@ -75,9 +75,12 @@ function candidatesFromJson(value: unknown): Record<string, unknown>[] {
 /**
  * Parse the stable numeric X user ID from the profile page JSON-LD block
  * (`script[type="application/ld+json"]` → `mainEntity.identifier`). Accepts
- * digits-only identifiers only; discards any candidate whose embedded handle
- * does not match `urlHandle` (stale-head guard on SPA navigation) and skips
- * malformed JSON without throwing. Returns `null` when nothing usable exists.
+ * digits-only identifiers only; accepts a candidate only when its embedded
+ * handle is present and matches `urlHandle`. Handle-less candidates are
+ * skipped: a stale SPA-navigated block without a handle cannot be
+ * cross-checked, and mis-attributing an ID causes rename/hijack misdecisions,
+ * worse than delayed coverage. Skips malformed JSON without throwing. Returns
+ * `null` when nothing usable exists.
  */
 export function parseJsonLdUserId(doc: Document, urlHandle: string): string | null {
   const expected = normalizeHandle(urlHandle);
@@ -94,7 +97,7 @@ export function parseJsonLdUserId(doc: Document, urlHandle: string): string | nu
       const identifier = candidateIdentifier(candidate);
       if (identifier === null) continue;
       const embedded = candidateHandle(candidate);
-      if (embedded !== null && embedded !== expected) continue;
+      if (embedded === null || embedded !== expected) continue;
       return identifier;
     }
   }
@@ -103,13 +106,19 @@ export function parseJsonLdUserId(doc: Document, urlHandle: string): string | nu
 
 /**
  * Fallback ID read: first `/profile_banners/(\d+)/` numeric segment found in
- * page images. Banner URLs carry no handle, so the cross-check is the page
- * context itself — `urlHandle` (from `parseProfile`) must be non-empty or the
- * read is refused. Returns `null` when no banner ID exists. Never throws.
+ * page images within `[data-testid="primaryColumn"]` when that scope element
+ * exists, otherwise document-wide (mid-render fallback). Banner URLs carry no
+ * handle, so the cross-check is the page context itself — `urlHandle` (from
+ * `parseProfile`) must be non-empty or the read is refused. Returns `null`
+ * when no in-scope banner ID exists. Never throws. Residual stale-column risk
+ * (stale column content after SPA navigation) is tracked in MANUAL_TESTING.md
+ * §8.
  */
 export function parseBannerUserId(doc: Document, urlHandle: string): string | null {
   if (normalizeHandle(urlHandle) === '') return null;
-  const images = doc.querySelectorAll('img[src*="profile_banners/"]');
+  const scope = doc.querySelector('[data-testid="primaryColumn"]');
+  const root: Document | Element = scope ?? doc;
+  const images = root.querySelectorAll('img[src*="profile_banners/"]');
   for (const image of images) {
     const match = BANNER_ID_PATTERN.exec(image.getAttribute('src') ?? '');
     const identifier = match === null ? undefined : match[1];

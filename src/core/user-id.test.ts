@@ -37,6 +37,11 @@ describe('parseJsonLdUserId', () => {
     setJsonLd('{"mainEntity":{"identifier":"12a","alternateName":"somehandle"}}');
     expect(parseJsonLdUserId(document, 'somehandle')).toBeNull();
   });
+
+  it('ignores handle-less JSON-LD identifiers that cannot be cross-checked', () => {
+    setJsonLd('{"mainEntity":{"identifier":"123"}}');
+    expect(parseJsonLdUserId(document, 'someone')).toBeNull();
+  });
 });
 
 describe('parseBannerUserId', () => {
@@ -47,6 +52,22 @@ describe('parseBannerUserId', () => {
 
   it('returns null without banner evidence', () => {
     expect(parseBannerUserId(document, 'somehandle')).toBeNull();
+  });
+
+  it('ignores out-of-column banners when the primary column has no banner', () => {
+    document.body.innerHTML =
+      '<div data-testid="primaryColumn"><span>no banner here</span></div>' +
+      '<img src="https://pbs.twimg.com/profile_banners/999/xyz">';
+    expect(parseBannerUserId(document, 'somehandle')).toBeNull();
+  });
+
+  it('prefers the in-column banner over outside-column banners', () => {
+    document.body.innerHTML =
+      '<div data-testid="primaryColumn">' +
+      '<img src="https://pbs.twimg.com/profile_banners/456/xyz">' +
+      '</div>' +
+      '<img src="https://pbs.twimg.com/profile_banners/999/xyz">';
+    expect(parseBannerUserId(document, 'somehandle')).toBe('456');
   });
 });
 

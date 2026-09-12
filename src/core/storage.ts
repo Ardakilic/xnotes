@@ -228,6 +228,58 @@ export async function deleteNote(handle: string, now?: number): Promise<void> {
   await saveStore(store);
 }
 
+/** Result of an explicit orphan-reassign move. */
+export type ReassignResult = 'moved' | 'target-occupied' | 'nothing-to-move';
+
+/**
+ * Atomically move the note at `sourceHandle` to `targetHandle` in one store
+ * read + one write: copy text/color/createdAt, bump updatedAt, write a
+ * tombstone for the source, and clear any tombstone on the target. The target
+ * stamps its recorded alias ID when known, else omits userId (fresh,
+ * re-learned later) — never carries the orphan's possibly-stale ID. Returns
+ * 'target-occupied' without writing when the target key already holds a note,
+ * and 'nothing-to-move' when the source holds none (or handles are
+ * invalid/identical after normalization, or the store read fails fail-soft).
+ * Never throws beyond saveStore's StorageWriteError.
+ */
+export async function reassignNote(
+  sourceHandle: string,
+  targetHandle: string,
+  now?: number,
+): Promise<ReassignResult> {
+  const source = normalizeHandle(sourceHandle);
+  const target = normalizeHandle(targetHandle);
+  if (source === '' || target === '') return 'nothing-to-move';
+  const sourceLower = source.toLowerCase();
+  const targetLower = target.toLowerCase();
+  if (sourceLower === targetLower) return 'nothing-to-move';
+  const timestamp = now ?? Date.now();
+  const raw = await safeRead(STORE_KEY);
+  if (!raw.ok) return 'nothing-to-move';
+  const store = raw.value === undefined ? emptyStore() : (toStoreV2(raw.value) ?? emptyStore());
+  const existing = store.notes[sourceLower];
+  if (existing === undefined) return 'nothing-to-move';
+  if (store.notes[targetLower] !== undefined) return 'target-occupied';
+  const aliasRead = await getAliases();
+  const aliases = aliasRead.aliases;
+  const next: NoteRecord = {
+    handle: target,
+    handleLower: targetLower,
+    text: existing.text,
+    color: existing.color,
+    createdAt: existing.createdAt,
+    updatedAt: timestamp,
+  };
+  const aliasUserId = aliases[targetLower]?.userId;
+  if (aliasUserId !== undefined) next.userId = aliasUserId;
+  store.notes[targetLower] = next;
+  delete store.tombstones[targetLower];
+  delete store.notes[sourceLower];
+  store.tombstones[sourceLower] = timestamp;
+  await saveStore(store);
+  return 'moved';
+}
+
 export function subscribeToStoreChanges(cb: () => void): () => void {
   const listener = (changes: Record<string, unknown>, areaName: string): void => {
     if (areaName === 'local' && STORE_KEY in changes) cb();
@@ -344,13 +396,25 @@ export async function saveView(view: ManagerView): Promise<void> {
 }
 
 /**
- * Read the local-only learned handle→userId alias store. Fail-soft: any
- * storage error or invalid blob yields an empty store. Never synced.
+ * Result of reading the local-only alias store. `ok` is false only when the
+ * underlying storage read itself failed; invalid blobs still yield an empty
+ * store with `ok: true` (fail-soft, never throws).
  */
-export async function getAliases(): Promise<AliasStore> {
+export interface AliasReadResult {
+  aliases: AliasStore;
+  ok: boolean;
+}
+
+/**
+ * Read the local-only learned handle→userId alias store. Fail-soft: any
+ * invalid blob yields an empty store with `ok: true`; only a storage-read
+ * failure yields `ok: false`. Never synced.
+ */
+export async function getAliases(): Promise<AliasReadResult> {
   const raw = await safeRead(ALIASES_KEY);
-  if (!raw.ok || raw.value === undefined) return emptyAliases();
-  return toAliasStore(raw.value) ?? emptyAliases();
+  if (!raw.ok) return { aliases: emptyAliases(), ok: false };
+  if (raw.value === undefined) return { aliases: emptyAliases(), ok: true };
+  return { aliases: toAliasStore(raw.value) ?? emptyAliases(), ok: true };
 }
 
 /**

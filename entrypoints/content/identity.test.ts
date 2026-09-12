@@ -138,7 +138,9 @@ describe('rename policy', () => {
     const moved = store.notes['newhandle'];
     expect(moved).toBeDefined();
     if (moved === undefined) return;
-    expect(formerHandleFor(moved, await getAliases(), store.tombstones)).toBe('oldhandle');
+    expect(formerHandleFor(moved, (await getAliases()).aliases, store.tombstones)).toBe(
+      'oldhandle',
+    );
   });
 });
 
@@ -182,7 +184,7 @@ describe('hijack policy', () => {
     await learnIdentityForProfile('victim', document);
 
     const store = await getStore();
-    const aliases = await getAliases();
+    const aliases = (await getAliases()).aliases;
     expect(getAlias(aliases, 'victim')?.userId).toBe('222');
     const note = store.notes['victim'];
     expect(note).toBeDefined();
@@ -235,7 +237,7 @@ describe('userId backfill', () => {
     const store = await getStore();
     expect(store.notes['newbie']?.userId).toBe('999');
     expect(store.tombstones['newbie']).toBeUndefined();
-    expect(getAlias(await getAliases(), 'newbie')?.userId).toBe('999');
+    expect(getAlias((await getAliases()).aliases, 'newbie')?.userId).toBe('999');
   });
 
   it('pins the prior owner ID when the binding disagrees with the observed ID', async () => {
@@ -266,7 +268,7 @@ describe('userId backfill', () => {
     expect(store.tombstones['recycled']).toBeUndefined();
     expect(note).toBeDefined();
     if (note === undefined) return;
-    expect(isOrphanNote(note, await getAliases())).toBe(true);
+    expect(isOrphanNote(note, (await getAliases()).aliases)).toBe(true);
   });
 
   it('stamps the observed ID when the binding agrees', async () => {
@@ -294,5 +296,39 @@ describe('userId backfill', () => {
     const store = await getStore();
     expect(store.notes['regular']?.userId).toBe('333');
     expect(store.tombstones['regular']).toBeUndefined();
+  });
+});
+
+describe('alias read status', () => {
+  it('returns the unknown outcome and writes nothing when the alias read fails', async () => {
+    await saveStore({
+      schemaVersion: 2,
+      notes: {
+        victim: {
+          handle: 'victim',
+          handleLower: 'victim',
+          text: 'original owner text',
+          color: 'red',
+          createdAt: 100,
+          updatedAt: 200,
+          userId: '111',
+        },
+      },
+      tombstones: {},
+    });
+    await saveAliases(recordObservation(emptyAliases(), 'victim', '111', 50));
+    setJsonLd('{"mainEntity":{"identifier":"222","alternateName":"victim"}}');
+    const getSpy = vi.spyOn(fakeBrowser.storage.local, 'get').mockImplementation(() => {
+      throw new Error('storage read failed');
+    });
+    const setSpy = vi.spyOn(fakeBrowser.storage.local, 'set');
+    const outcome = await learnIdentityForProfile('victim', document);
+    expect(outcome).toEqual({ observedId: null, renamedFrom: null, withheld: false });
+    expect(setSpy).not.toHaveBeenCalled();
+    getSpy.mockRestore();
+    setSpy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['victim']?.text).toBe('original owner text');
+    expect(store.notes['victim']?.userId).toBe('111');
   });
 });

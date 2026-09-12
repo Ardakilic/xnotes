@@ -433,9 +433,32 @@ describe('orphaned notes', () => {
     await vi.waitFor(async () => {
       const store = await getStore();
       expect(store.notes['newhome']?.text).toBe('original owner text');
+      expect(store.notes['newhome']?.userId).toBeUndefined();
       expect(store.notes['victim']).toBeUndefined();
       expect(store.tombstones['victim']).toBeDefined();
     });
+  });
+
+  it('explicit reassign refuses a populated target without writing', async () => {
+    stubPrompt('taken');
+    const alerts = stubAlert();
+    const store = storeWith([
+      { ...makeNote('victim', 'original owner text', 'red', 200), userId: '111' },
+      makeNote('taken', 'kept text', null, 300),
+    ]);
+    await saveAliases(recordObservation(emptyAliases(), 'victim', '222', 300));
+    const root = await mountWithStore(store);
+    const section = root.querySelector('.orphan-section');
+    expect(section).not.toBeNull();
+    if (section === null) return;
+    button(section, 'Reassign').click();
+    await vi.waitFor(() => {
+      expect(alerts.some((m) => m.includes('already has a note'))).toBe(true);
+    });
+    const after = await getStore();
+    expect(after.notes['taken']?.text).toBe('kept text');
+    expect(after.notes['victim']?.text).toBe('original owner text');
+    expect(after.tombstones['victim']).toBeUndefined();
   });
 });
 

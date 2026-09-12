@@ -57,3 +57,19 @@ outcomes are unaffected, so this is operationally safe. `merge` never strips the
 field on new clients: it carries winning `NoteRecord` objects wholesale and never
 rebuilds them (`canonicalNote` only affects tie-break bytes); covered by the
 `userId` commutativity fixtures in `src/sync/merge.test.ts`.
+
+## Review follow-ups (PR review, all verified against code and fixed)
+
+- [x] Serialize `onNav` identity-learning passes (`entrypoints/content/index.ts`
+      `learnChain` queue) so overlapping navigations cannot interleave
+      `getStore`→`saveStore` and lose a rename move; token-fresh mount preserved
+- [x] `getAliases()` returns `{ aliases, ok }`; learn aborts all mutations on
+      read failure (previously clobbered bindings with a near-empty store)
+- [x] Storage-level atomic `reassignNote` (single read + single write, refuses
+      populated targets); manager `doReassign` wired to it
+- [x] Banner fallback scoped to `[data-testid="primaryColumn"]` when present
+      (document-wide only as mid-render fallback); stale-banner regression tests
+- [x] JSON-LD candidates with a null embedded handle rejected (fail-closed
+      cross-check per D3); handle-less regression test
+- [x] `decorateTick` filters withheld notes (`withoutWithheldNotes` in
+      `src/ui/badges.ts`) so badges/hover never leak a previous owner's text

@@ -1,6 +1,6 @@
 import { COLOR_KEYS, COLOR_LABELS } from '../../src/core/colors';
 import type { ColorKey } from '../../src/core/colors';
-import { getAlias, lookupByUserId, type AliasStore } from '../../src/core/aliases';
+import { emptyAliases, getAlias, lookupByUserId, type AliasStore } from '../../src/core/aliases';
 import { filterNotes } from '../../src/core/filters';
 import type { ColorFilter } from '../../src/core/filters';
 import { formatTimestamp } from '../../src/core/format';
@@ -10,6 +10,8 @@ import {
   getAliases,
   getStore,
   getView,
+  reassignNote,
+  type ReassignResult,
   saveStore,
   saveView,
   subscribeToStoreChanges,
@@ -172,7 +174,9 @@ export function mountManager(root: HTMLElement): void {
 
   /** Reload store and aliases, then re-render. Aliases are local-only reads. */
   async function refresh(): Promise<void> {
-    renderList(await getStore(), await getAliases());
+    const store = await getStore();
+    const aliasRead = await getAliases();
+    renderList(store, aliasRead.ok ? aliasRead.aliases : emptyAliases());
   }
 
   /**
@@ -400,9 +404,11 @@ export function mountManager(root: HTMLElement): void {
   }
 
   /**
-   * Explicit orphan reassign: copy the orphan's text/color under the chosen
-   * handle, then tombstone the orphan key so the entry resolves. Same-handle
-   * choice is a no-op. Fail-soft with alerts like other manager actions.
+   * Explicit orphan reassign via the storage-level atomic move: the orphan's
+   * text/color moves under the chosen handle with the source tombstoned.
+   * Same-handle choice is a no-op. A populated target refuses without
+   * writing; a vanished source just refreshes. Fail-soft with alerts like
+   * other manager actions.
    */
   async function doReassign(note: NoteRecord): Promise<void> {
     const answer = prompt(`Move note for @${note.handle} to which handle?`);
@@ -414,14 +420,20 @@ export function mountManager(root: HTMLElement): void {
       return;
     }
     if (target.toLowerCase() === note.handleLower) return;
+    let result: ReassignResult;
     try {
-      await upsertNote(target, note.text, note.color);
-      await deleteNote(note.handle);
+      result = await reassignNote(note.handle, target);
     } catch {
       alert('Could not reassign — the store was not written. Please try again.');
       return;
     }
-    if (editing !== null && editing.handleLower === note.handleLower) editing = null;
+    if (result === 'target-occupied') {
+      alert('That handle already has a note — reassign was not performed.');
+      return;
+    }
+    if (result === 'moved' && editing !== null && editing.handleLower === note.handleLower) {
+      editing = null;
+    }
     await refresh();
   }
 

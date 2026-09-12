@@ -2,9 +2,15 @@
 // @vitest-environment-options {"url": "https://x.com/"}
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import { emptyAliases, recordObservation } from '../core/aliases';
 import type { ColorKey } from '../core/colors';
 import type { NoteRecord } from '../core/types';
-import { decorateAvatars, extractHandleFromAvatarTestid, injectHoverCardNote } from './badges';
+import {
+  decorateAvatars,
+  extractHandleFromAvatarTestid,
+  injectHoverCardNote,
+  withoutWithheldNotes,
+} from './badges';
 
 function makeNote(handle: string, color: ColorKey | null, text = 'hello'): NoteRecord {
   return { handle, handleLower: handle.toLowerCase(), text, color, createdAt: 1, updatedAt: 2 };
@@ -134,5 +140,37 @@ describe('notes carrying userId', () => {
       '<div data-testid="HoverCard"><a href="https://x.com/jack">Jack</a></div>';
     injectHoverCardNote(document, notes);
     expect(document.querySelectorAll('div[data-xn-hover]').length).toBe(1);
+  });
+});
+
+describe('withoutWithheldNotes', () => {
+  it('excludes notes whose known userId disagrees with the known alias', () => {
+    const notes = {
+      victim: { ...makeNote('victim', 'red'), userId: '111' },
+      regular: { ...makeNote('regular', null), userId: '333' },
+    };
+    const aliases = recordObservation(
+      recordObservation(emptyAliases(), 'victim', '222', 100),
+      'regular',
+      '333',
+      100,
+    );
+    const visible = withoutWithheldNotes(notes, aliases);
+    expect(Object.keys(visible)).toEqual(['regular']);
+    expect(visible['regular']?.text).toBe('hello');
+  });
+
+  it('keeps entries when either side is unknown', () => {
+    const notes = {
+      noid: makeNote('noid', null),
+      noalias: { ...makeNote('noalias', null), userId: '123' },
+    };
+    const aliases = recordObservation(emptyAliases(), 'someoneelse', '999', 100);
+    const visible = withoutWithheldNotes(notes, aliases);
+    expect(Object.keys(visible).sort()).toEqual(['noalias', 'noid']);
+  });
+
+  it('returns an empty map for empty input', () => {
+    expect(withoutWithheldNotes({}, emptyAliases())).toEqual({});
   });
 });

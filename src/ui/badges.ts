@@ -1,7 +1,28 @@
 import type { NoteRecord } from '../core/types';
+import { getAlias, type AliasStore } from '../core/aliases';
 import { parseProfile } from '../core/profile';
 
 const AVATAR_TESTID_PREFIX = 'UserAvatar-Container-';
+
+/**
+ * Filter out hijack-withheld notes: exclude an entry only when the note's
+ * `userId` is known AND the alias for its handle is known AND they differ.
+ * Entries are preserved when either side is unknown. Pure; never throws.
+ */
+export function withoutWithheldNotes(
+  notes: Record<string, NoteRecord>,
+  aliases: AliasStore,
+): Record<string, NoteRecord> {
+  const visible: Record<string, NoteRecord> = Object.create(null);
+  for (const [key, note] of Object.entries(notes)) {
+    if (note.userId !== undefined) {
+      const alias = getAlias(aliases, note.handleLower);
+      if (alias !== null && alias.userId !== note.userId) continue;
+    }
+    visible[key] = note;
+  }
+  return visible;
+}
 
 export function extractHandleFromAvatarTestid(testid: string): string | null {
   if (!testid.startsWith(AVATAR_TESTID_PREFIX)) return null;
