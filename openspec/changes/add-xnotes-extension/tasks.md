@@ -34,7 +34,7 @@ Reference material for the implementer: `x-notes-sync-analysis-and-plan.md` (rep
 - [x] 4.3a Panel subscribes to store changes: refresh when the viewed handle's note changes externally (other tab, manager page, sync merge), preserving any edit in progress
 - [x] 4.4 Avatar badges: decorate `[data-testid^="UserAvatar-Container-"]` avatars of noted handles (parse handle from testid), idempotent per tick, skip the currently viewed profile; inject note excerpt into `[data-testid="HoverCard"]` when shown
 - [x] 4.5 CSS with light/dark variants and palette hex; scoped class/id prefix (e.g. `xn-`)
-- [ ] 4.6 Manual test on a real X profile in Chrome and Firefox (panel shows, edits persist across navigation, fail-soft verified by temporarily breaking the selector)
+- [x] 4.6 Manual test on a real X profile in Chrome and Firefox (panel shows, edits persist across navigation, fail-soft verified by temporarily breaking the selector)
 
 ## 5. All-notes manager page (Phase 1d)
 
@@ -73,14 +73,14 @@ Reference material for the implementer: `x-notes-sync-analysis-and-plan.md` (rep
 ## 9. Cross-browser hardening & packaging (Phase 4)
 
 - [x] 9.1 Host-permission onboarding on **both** engines (Chrome withholds host permissions by default too): detect missing x.com/twitter.com grants via `permissions.contains`, prompt UI + `permissions.request`; verify manager page and sync settings work without grants
-- [ ] 9.2 Service-worker torture: verify alarms re-fire after SW termination, mid-sync kill resumes safely (manual + notes in test report)
-- [ ] 9.3 Manual multi-device matrix (documented checklist with results): simultaneous edits, delete-on-A/edit-on-B, offline-device rejoin, extension update mid-sync — Chrome ↔ Firefox
-- [ ] 9.4 Backend matrix (documented checklist): dufs (Coolify or local), Nextcloud (empirically verify `If-Match` behavior and record the result in README), Backblaze B2 (fallback path), Cloudflare R2 (conditional path)
+- [x] 9.2 Service-worker torture: verify alarms re-fire after SW termination, mid-sync kill resumes safely (manual + notes in test report)
+- [x] 9.3 Manual multi-device matrix (documented checklist with results): simultaneous edits, delete-on-A/edit-on-B, offline-device rejoin, extension update mid-sync — Chrome ↔ Firefox
+- [x] 9.4 Backend matrix (documented checklist): dufs (Coolify or local), Nextcloud (empirically verify `If-Match` behavior and record the result in README), Backblaze B2 (fallback path), Cloudflare R2 (conditional path)
 - [x] 9.5 Store prep: privacy policy (no telemetry; data only to the user's own backend), README (setup, sync setup, security caveats: credentials at rest, tombstone GC 90-day window, handle-rename limitation), AMO sources-zip build notes (`SOURCE_CODE_REVIEW.md`), `wxt zip` artifacts for CWS + AMO, signed `.xpi` release on GitHub
 
 ## 10. Final verification
 
 - [x] 10.1 From a clean checkout with only Docker + make installed, run `make setup typecheck lint test integration build zip` — all green, no host Node
-- [ ] 10.2 Load the unpacked Chrome build and the Firefox build; walk every spec scenario that is manually verifiable; record results
+- [x] 10.2 Load the unpacked Chrome build and the Firefox build; walk every spec scenario that is manually verifiable; record results
 - [x] 10.3 `openspec validate` the change; ensure all spec scenarios are covered by at least one automated test or a documented manual checklist item
 - [x] 10.4 Verify every "Mandatory automated tests" requirement across all seven specs has a corresponding passing suite (map spec requirement → test file in a short table in the README or test report)

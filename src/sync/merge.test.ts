@@ -68,6 +68,50 @@ describe('merge', () => {
     expect(merge(x, x, NOW)).toEqual(x);
   });
 
+  it('keeps a __proto__-handle note as an own key (null-prototype result maps)', () => {
+    const proto = makeNote('__proto__', 300, 'proto note');
+    const localNotes: Record<string, NoteRecord> = Object.create(null);
+    localNotes['a'] = makeNote('a', 100);
+    localNotes['__proto__'] = proto;
+    const remoteNotes: Record<string, NoteRecord> = Object.create(null);
+    remoteNotes['b'] = makeNote('b', 200);
+    remoteNotes['__proto__'] = proto;
+    const local: StoreV2 = {
+      schemaVersion: 2,
+      notes: localNotes,
+      tombstones: Object.create(null),
+    };
+    const remote: StoreV2 = {
+      schemaVersion: 2,
+      notes: remoteNotes,
+      tombstones: Object.create(null),
+    };
+    const merged = merge(local, remote, NOW);
+    expect(Object.prototype.hasOwnProperty.call(merged.notes, '__proto__')).toBe(true);
+    expect(merged.notes['__proto__']).toEqual(proto);
+    expect(JSON.parse(JSON.stringify(merged)).notes['__proto__']).toEqual(
+      JSON.parse(JSON.stringify(proto)),
+    );
+  });
+
+  it('keeps a __proto__-handle tombstone as an own key', () => {
+    const localTombstones: Record<string, number> = Object.create(null);
+    localTombstones['__proto__'] = NOW - DAY_MS;
+    const local: StoreV2 = {
+      schemaVersion: 2,
+      notes: Object.create(null),
+      tombstones: localTombstones,
+    };
+    const remote: StoreV2 = {
+      schemaVersion: 2,
+      notes: Object.create(null),
+      tombstones: Object.create(null),
+    };
+    const merged = merge(local, remote, NOW);
+    expect(Object.prototype.hasOwnProperty.call(merged.tombstones, '__proto__')).toBe(true);
+    expect(merged.tombstones['__proto__']).toBe(NOW - DAY_MS);
+  });
+
   it('keeps a tombstone exactly 90 days old and drops one 1 ms older', () => {
     const exactly = NOW - TOMBSTONE_MAX_AGE_MS;
     expect(merge(storeWith({}, { a: exactly }), storeWith(), NOW).tombstones['a']).toBe(exactly);

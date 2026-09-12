@@ -170,6 +170,28 @@ describe('inline edit', () => {
     });
   });
 
+  it('alerts and keeps the edit form when the save write fails', async () => {
+    const alerts = stubAlert();
+    const root = await mount([makeNote('jack', 'hello', null, 100)]);
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set').mockImplementation(() => {
+      throw new Error('QUOTA_BYTES quota exceeded');
+    });
+    button(root, 'Edit').click();
+    await vi.waitFor(() => {
+      expect(root.querySelector('textarea.edit-text')).not.toBeNull();
+    });
+    const textarea = root.querySelector<HTMLTextAreaElement>('textarea.edit-text');
+    if (textarea === null) return;
+    textarea.value = 'doomed edit';
+    button(root, 'Save').click();
+    await vi.waitFor(() => {
+      expect(alerts.some((m) => m.includes('Could not save'))).toBe(true);
+    });
+    const survivor = root.querySelector<HTMLTextAreaElement>('textarea.edit-text');
+    expect(survivor?.value).toBe('doomed edit');
+    spy.mockRestore();
+  });
+
   it('keeps an in-progress edit when the store changes underneath', async () => {
     const root = await mount([makeNote('jack', 'hello', null, 100)]);
     button(root, 'Edit').click();
@@ -277,6 +299,21 @@ describe('import', () => {
       expect(store.notes['jack']).toBeUndefined();
       expect(store.notes['alice']).toBeDefined();
     });
+  });
+
+  it('alerts and leaves the store untouched when the import write fails', async () => {
+    stubConfirm([true]);
+    const alerts = stubAlert();
+    const root = await mount([makeNote('jack', 'local', null, 100)]);
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set').mockImplementation(() => {
+      throw new Error('QUOTA_BYTES quota exceeded');
+    });
+    await importFile(root, JSON.stringify(backup));
+    await vi.waitFor(() => {
+      expect(alerts.some((m) => m.includes('Could not import'))).toBe(true);
+    });
+    spy.mockRestore();
+    expect(Object.keys((await getStore()).notes)).toEqual(['jack']);
   });
 
   it('aborts when both confirms are declined', async () => {

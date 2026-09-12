@@ -44,8 +44,8 @@ export function merge(local: StoreV2, remote: StoreV2, now: number = Date.now())
     ...Object.keys(remote.tombstones),
   ]);
 
-  const notes: Record<string, NoteRecord> = {};
-  const tombstones: Record<string, number> = {};
+  const notes: Record<string, NoteRecord> = Object.create(null);
+  const tombstones: Record<string, number> = Object.create(null);
 
   for (const handle of handles) {
     const candidates: Candidate[] = [];

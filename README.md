@@ -126,13 +126,13 @@ demo/          standalone Vite page (storage shim over localStorage) for UI iter
 
 ## Backend compatibility
 
-| Backend       | Status                      | Mechanism                                                                                                                                                                                                      |
-| ------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| dufs ≥ 0.42.0 | ✅ integration-tested       | ETag/`If-None-Match` on GET; HEAD-compare precheck guards writes (dufs ignores `If-Match` on PUT — verified empirically against v0.46.0; PUT responses also carry no ETag, so the adapter fetches it via HEAD) |
-| Nextcloud     | ⏳ pending empirical check  | ETags exposed; `If-Match` on PUT undocumented — see `MANUAL_TESTING.md`                                                                                                                                        |
-| Cloudflare R2 | ⏳ pending manual smoke     | conditional writes supported natively                                                                                                                                                                          |
-| Backblaze B2  | ⏳ pending manual smoke     | no documented conditional writes → HEAD-compare fallback (set "provider lacks conditional writes")                                                                                                             |
-| adobe/s3mock  | ✅ integration test fixture | ignores `If-Match` on PUT like B2 — exercises the fallback path                                                                                                                                                |
+| Backend       | Status                      | Mechanism                                                                                                                                                                                                                                                                     |
+| ------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| dufs ≥ 0.42.0 | ✅ integration-tested       | ETag/`If-None-Match` on GET; HEAD-compare precheck guards writes (dufs ignores `If-Match` on PUT — verified empirically against v0.46.0; PUT responses also carry no ETag, so the adapter fetches it via HEAD). Concurrent multi-device sync NOT safe (HEAD-compare fallback) |
+| Nextcloud     | ✅ verified 2026-09-12      | `If-Match` on PUT empirically verified honored (stale etag → 412) — conditional writes work natively                                                                                                                                                                          |
+| Cloudflare R2 | ✅ verified 2026-09-12      | conditional writes supported natively; conflict resolution verified (two devices pushing concurrently)                                                                                                                                                                        |
+| Backblaze B2  | ✅ verified 2026-09-12      | no documented conditional writes → HEAD-compare fallback (set "provider lacks conditional writes"); concurrent multi-device sync NOT supported — single-device or sequential multi-device use only                                                                            |
+| adobe/s3mock  | ✅ integration test fixture | ignores `If-Match` on PUT like B2 — exercises the fallback path                                                                                                                                                                                                               |
 
 ## Testing
 
@@ -160,7 +160,7 @@ Everything not unit-testable (real-browser behavior, service-worker torture, mul
 
 ## Store packaging
 
-`make zip` produces `.output/xnotes-<version>-chrome.zip`, `.output/xnotes-<version>-firefox-mv3.zip` and the AMO sources zip (automatic for the Firefox target). See [SOURCE_CODE_REVIEW.md](SOURCE_CODE_REVIEW.md) for AMO review/build notes and [PRIVACY.md](PRIVACY.md) for the privacy policy.
+`make zip` produces `.output/xnotes-<version>-chrome.zip`, `.output/xnotes-<version>-firefox.zip` and the AMO sources zip (automatic for the Firefox target). See [SOURCE_CODE_REVIEW.md](SOURCE_CODE_REVIEW.md) for AMO review/build notes and [PRIVACY.md](PRIVACY.md) for the privacy policy.
 
 ## License
 

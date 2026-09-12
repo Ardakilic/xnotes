@@ -69,6 +69,15 @@ export function createPanel(handle: string, hooks: PanelHooks): Panel {
       });
   }
 
+  function showError(message: string): void {
+    root.querySelector('.xn-error')?.remove();
+    const error = document.createElement('div');
+    error.className = 'xn-error';
+    error.setAttribute('role', 'alert');
+    error.textContent = message;
+    body.append(error);
+  }
+
   function renderEmpty(): void {
     mode = 'empty';
     clearAccent();
@@ -158,7 +167,7 @@ export function createPanel(handle: string, hooks: PanelHooks): Panel {
           updatedAt: now,
         });
       } catch {
-        if (!disposed) renderEdit(note);
+        if (!disposed) showError('Could not save — the note was not written. Please try again.');
       } finally {
         mutationInFlight = false;
         if (!disposed) setMutationControlsEnabled(true);
@@ -194,7 +203,8 @@ export function createPanel(handle: string, hooks: PanelHooks): Panel {
               revision++;
               renderEmpty();
             } catch {
-              if (!disposed) renderView(note);
+              if (!disposed)
+                showError('Could not delete — the note was not removed. Please try again.');
             } finally {
               mutationInFlight = false;
               if (!disposed) setMutationControlsEnabled(true);

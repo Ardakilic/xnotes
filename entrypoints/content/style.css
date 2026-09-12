@@ -66,6 +66,11 @@
   margin: 0 0 8px;
 }
 
+.xn-error {
+  margin: 8px 0 0;
+  color: #f4212e;
+}
+
 .xn-actions {
   display: flex;
   align-items: center;

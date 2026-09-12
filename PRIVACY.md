@@ -1,28 +1,34 @@
 # Privacy Policy — xNotes
 
-**Last updated:** 2026-08-04
+**Last updated:** 2026-09-12
 
-## What we collect
+xNotes is a browser extension. This policy describes what the extension does with data, and what the developer can see. Short version: nothing, and nothing.
 
-Nothing. xNotes has no analytics, no telemetry, no crash reporting, no third-party SDKs, and no servers of our own.
+## What the developer collects
 
-## Where your data goes
+Nothing. There is no telemetry, no analytics, no crash reports, no ads, no trackers, no third-party SDKs, and no developer-operated servers. The extension has no accounts and no sign-in. The developer has no access to your notes, your sync backend, or any data about you.
 
-- **By default, nowhere.** All notes are stored locally in your browser's extension storage (`browser.storage.local`) on your device.
-- **Only if you configure sync**, your notes are uploaded to a storage backend that **you** provide and control (a WebDAV server or an S3-compatible bucket). We never operate, see, or have access to that backend.
-- **If you enable encryption**, notes are encrypted on your device (AES-256-GCM with a key derived from your passphrase) before upload. The backend only ever stores opaque ciphertext.
+## Where your data is stored
 
-## Permissions
+On your device. Notes and settings live in the browser's local extension storage (`browser.storage.local`). They never leave your machine unless you configure sync.
 
-- `storage` — to save your notes locally.
-- `alarms` — to schedule sync cycles.
-- Site access to `x.com`/`twitter.com` — to show the note panel on profile pages. Granted by you, revocable at any time; the extension works without it (the all-notes page remains fully functional).
-- Access to other sites is requested **only** when you configure a sync backend, and only for that backend's origin.
+## Network access
+
+The only network requests xNotes can ever make go to a sync backend **you yourself configure** — your own WebDAV or S3-compatible server. No other network traffic exists.
+
+With encryption enabled, your notes are encrypted on your device (AES-256-GCM, key derived from your passphrase) before upload; the backend only stores opaque ciphertext that neither the backend nor the developer can read.
 
 ## Credentials
 
-Backend credentials are stored in local extension storage so sync can run unattended. Browser extension storage is not encrypted at rest — use scoped credentials (dedicated users, single-bucket application keys).
+Sync credentials are stored in local extension storage so sync can run unattended. Browser extension storage is not encrypted at rest — use scoped credentials (dedicated users, single-bucket application keys).
+
+## Permissions
+
+- `storage` — save your notes and settings locally.
+- `alarms` — schedule the optional sync to your own backend.
+- Site access to `x.com`/`twitter.com` — show the notes panel and avatar badges on profile pages; reads only the profile handle. Granted by you, revocable at any time; the extension works without it.
+- Access to any other origin is requested only when you configure a sync backend, and only for that backend's origin.
 
 ## Contact
 
-For questions about this policy, open an issue on the project repository.
+Questions about this policy: open an issue on the project repository (https://github.com/Ardakilic/xnotes).

@@ -40,11 +40,11 @@ build: ## chrome + firefox builds
 zip: ## store-ready zips (firefox zip includes sources zip automatically)
 	$(DOCKER) sh -c 'npm run zip && npm run zip:firefox'
 
-dev: ## chromium dev build with HMR; load .output/xnotes-chrome-mv3 as unpacked
+dev: ## chromium dev build with HMR; load .output/chrome-mv3 as unpacked
 	$(DOCKER) -p 3000:3000 npm run dev -- --port 3000 --host 0.0.0.0
 
 # ponytail: `dev-firefox` not `dev:firefox` — macOS ships GNU make 3.81, which rejects colons in targets
-dev-firefox: ## firefox dev build; load .output/xnotes-firefox-mv3
+dev-firefox: ## firefox dev build; load .output/firefox-mv3
 	$(DOCKER) -p 3001:3001 npm run dev:firefox -- --port 3001 --host 0.0.0.0
 
 generate-assets: ## regenerate public/icons from assets/logo-{light,dark}.png

@@ -78,7 +78,7 @@ export function backoffMinutes(failureCount: number): number {
 
 /** Deterministic byte serialization (sorted keys) — used for hashing AND as the wire format. */
 export function encodeStore(store: StoreV2): Uint8Array<ArrayBuffer> {
-  const notes: Record<string, unknown> = {};
+  const notes: Record<string, unknown> = Object.create(null);
   for (const key of Object.keys(store.notes).sort()) {
     const n = store.notes[key]!;
     notes[key] = {
@@ -90,7 +90,7 @@ export function encodeStore(store: StoreV2): Uint8Array<ArrayBuffer> {
       updatedAt: n.updatedAt,
     };
   }
-  const tombstones: Record<string, number> = {};
+  const tombstones: Record<string, number> = Object.create(null);
   for (const key of Object.keys(store.tombstones).sort()) tombstones[key] = store.tombstones[key]!;
   return new TextEncoder().encode(JSON.stringify({ schemaVersion: 2, notes, tombstones }));
 }
@@ -337,6 +337,19 @@ export async function runCycle(): Promise<void> {
       void runCycle();
     }
   }
+}
+
+export async function clearStaleSyncingStatus(): Promise<void> {
+  // ponytail: single-flight `running` makes any persisted 'syncing' in a fresh SW stale —
+  // rewrite to a truthful error so the popup/badge don't lie after a service-worker death
+  if (running) return;
+  const state = await getSyncState();
+  if (state.status !== 'syncing' || running) return;
+  await saveSyncState({
+    ...state,
+    status: 'error',
+    lastError: 'Sync interrupted (extension was restarted)',
+  });
 }
 
 export async function rescheduleAlarm(): Promise<void> {
