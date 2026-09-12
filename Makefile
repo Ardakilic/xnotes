@@ -17,7 +17,8 @@ else
   PREPARE := true
 endif
 
-DOCKER := docker run --rm $(USER_FLAGS) $(CACHE_FLAGS) -v "$(PWD)":/app -w /app $(NODE_IMAGE)
+DOCKER = docker run --rm $(USER_FLAGS) $(CACHE_FLAGS) $(PORT_FLAGS) -v "$(PWD)":/app -w /app $(NODE_IMAGE)
+PORT_FLAGS :=
 
 .PHONY: setup test typecheck lint build zip dev dev-firefox integration flush generate-assets
 
@@ -40,12 +41,16 @@ build: ## chrome + firefox builds
 zip: ## store-ready zips (firefox zip includes sources zip automatically)
 	$(DOCKER) sh -c 'npm run zip && npm run zip:firefox'
 
+# ponytail: PORT_FLAGS is target-specific — docker requires -p before the image,
+# anything after it becomes the container command
+dev: PORT_FLAGS := -p 3000:3000
 dev: ## chromium dev build with HMR; load .output/chrome-mv3 as unpacked
-	$(DOCKER) -p 3000:3000 npm run dev -- --port 3000 --host 0.0.0.0
+	$(DOCKER) npm run dev -- --port 3000 --host 0.0.0.0
 
 # ponytail: `dev-firefox` not `dev:firefox` — macOS ships GNU make 3.81, which rejects colons in targets
+dev-firefox: PORT_FLAGS := -p 3001:3001
 dev-firefox: ## firefox dev build; load .output/firefox-mv3
-	$(DOCKER) -p 3001:3001 npm run dev:firefox -- --port 3001 --host 0.0.0.0
+	$(DOCKER) npm run dev:firefox -- --port 3001 --host 0.0.0.0
 
 generate-assets: ## regenerate public/icons from assets/logo-{light,dark}.png
 	$(DOCKER) node scripts/generate-assets.mjs
