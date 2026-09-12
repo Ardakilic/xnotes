@@ -19,7 +19,7 @@ endif
 
 DOCKER := docker run --rm $(USER_FLAGS) $(CACHE_FLAGS) -v "$(PWD)":/app -w /app $(NODE_IMAGE)
 
-.PHONY: setup test typecheck lint build zip dev dev-firefox integration flush
+.PHONY: setup test typecheck lint build zip dev dev-firefox integration flush generate-assets
 
 setup: ## install dependencies (npm ci when a lockfile exists)
 	$(PREPARE)
@@ -46,6 +46,9 @@ dev: ## chromium dev build with HMR; load .output/xnotes-chrome-mv3 as unpacked
 # ponytail: `dev-firefox` not `dev:firefox` — macOS ships GNU make 3.81, which rejects colons in targets
 dev-firefox: ## firefox dev build; load .output/xnotes-firefox-mv3
 	$(DOCKER) -p 3001:3001 npm run dev:firefox -- --port 3001 --host 0.0.0.0
+
+generate-assets: ## regenerate public/icons from assets/logo-{light,dark}.png
+	$(DOCKER) node scripts/generate-assets.mjs
 
 integration: ## dockerized integration tests (dufs + S3 mock)
 	docker compose -f docker/compose.integration.yml up --build --abort-on-container-exit --exit-code-from tests; \

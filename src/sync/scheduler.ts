@@ -36,6 +36,10 @@ export class SyncPassphraseRequiredError extends Error {
 let running = false;
 let pendingRerun = false;
 let passphrase: string | null = null;
+// ponytail: fallback passphrases bridge changes until a push re-encrypts the remote under
+// the current one; deduped, cleared on every successful push — grows only across
+// never-syncing passphrase churn, which resets at the first success
+let passphraseFallbacks: string[] = [];
 let overwritePlaintextOnce = false;
 let forcePushOnce = false;
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -49,7 +53,11 @@ export function setAdapterFactoryForTests(
 }
 
 export function setPassphrase(value: string | null): void {
-  passphrase = value;
+  const next = value === '' ? null : value;
+  if (passphrase !== null && next !== null && next !== passphrase) {
+    if (!passphraseFallbacks.includes(passphrase)) passphraseFallbacks.push(passphrase);
+  }
+  passphrase = next;
 }
 
 export function isPassphraseSet(): boolean {
@@ -119,21 +127,39 @@ function parsePlaintext(bytes: Uint8Array): StoreV2 {
   return store;
 }
 
-async function decodeRemote(bytes: Uint8Array, settings: Settings): Promise<StoreV2> {
-  if (settings.encryptionEnabled) {
-    if (!isEnvelope(bytes)) {
-      if (overwritePlaintextOnce) {
-        overwritePlaintextOnce = false;
-        return parsePlaintext(bytes);
-      }
-      throw new EncryptionMismatchError('remote-plaintext');
+async function decryptEnvelope(bytes: Uint8Array): Promise<unknown> {
+  const candidates = [requirePassphrase(), ...passphraseFallbacks];
+  let lastError: SyncDecodeError | null = null;
+  for (const candidate of candidates) {
+    try {
+      return await decryptStore(bytes, candidate);
+    } catch (err) {
+      if (!(err instanceof SyncDecodeError)) throw err;
+      lastError = err;
     }
-    const decrypted = await decryptStore(bytes, requirePassphrase());
-    const store = toStoreV2(decrypted);
+  }
+  throw lastError!;
+}
+
+async function decodeRemote(
+  bytes: Uint8Array,
+  settings: Settings,
+  force: boolean,
+): Promise<StoreV2> {
+  if (isEnvelope(bytes)) {
+    if (!settings.encryptionEnabled && !force)
+      throw new EncryptionMismatchError('remote-encrypted');
+    const store = toStoreV2(await decryptEnvelope(bytes));
     if (store === null) throw new SyncDecodeError('decrypted blob is not a valid notes store');
     return store;
   }
-  if (isEnvelope(bytes)) throw new EncryptionMismatchError('remote-encrypted');
+  if (settings.encryptionEnabled) {
+    if (overwritePlaintextOnce) {
+      overwritePlaintextOnce = false;
+      return parsePlaintext(bytes);
+    }
+    throw new EncryptionMismatchError('remote-plaintext');
+  }
   return parsePlaintext(bytes);
 }
 
@@ -168,20 +194,30 @@ async function syncCycle(
       const local = await getStore();
       const localHash = await hashStore(local);
       const bytes = await encodeForUpload(local, settings);
-      const put = await adapter.put(bytes, etag ? { ifMatch: etag } : { ifNoneMatch: '*' });
-      return { etag: put.etag !== '' ? put.etag : etag, hash: localHash };
+      try {
+        const put = await adapter.put(bytes, etag ? { ifMatch: etag } : { ifNoneMatch: '*' });
+        return { etag: put.etag !== '' ? put.etag : etag, hash: localHash };
+      } catch (err) {
+        if (err instanceof SyncConflictError && attempt < MAX_PUT_ATTEMPTS - 1) continue;
+        throw err;
+      }
     }
 
     if (remote.kind === 'not-found') {
       const local = await getStore();
       const localHash = await hashStore(local);
       const bytes = await encodeForUpload(local, settings);
-      const put = await adapter.put(bytes, { ifNoneMatch: '*' });
-      return { etag: put.etag !== '' ? put.etag : null, hash: localHash };
+      try {
+        const put = await adapter.put(bytes, { ifNoneMatch: '*' });
+        return { etag: put.etag !== '' ? put.etag : null, hash: localHash };
+      } catch (err) {
+        if (err instanceof SyncConflictError && attempt < MAX_PUT_ATTEMPTS - 1) continue;
+        throw err;
+      }
     }
 
     etag = remote.etag;
-    const remoteStore = await decodeRemote(remote.data, settings);
+    const remoteStore = await decodeRemote(remote.data, settings, force);
     const local = await getStore();
     const localHash = await hashStore(local);
     const merged = merge(local, remoteStore);
@@ -254,6 +290,7 @@ async function cycleOnce(): Promise<void> {
     };
     await saveSyncState(next);
     await updateBadge(next);
+    passphraseFallbacks = [];
   } catch (err) {
     if (force) forcePushOnce = true;
     const after = await getSyncState();
@@ -267,10 +304,20 @@ async function cycleOnce(): Promise<void> {
     };
     await saveSyncState(next);
     await updateBadge(next);
-    try {
-      await browser.alarms.create(BACKOFF_ALARM, { delayInMinutes: backoffMinutes(failureCount) });
-    } catch {
-      // ponytail: backoff alarm is best-effort; the periodic alarm still retries
+    if (err instanceof SyncAuthError) {
+      try {
+        await browser.alarms.clear(BACKOFF_ALARM);
+      } catch {
+        // ponytail: same best-effort alarm bookkeeping as the create below
+      }
+    } else {
+      try {
+        await browser.alarms.create(BACKOFF_ALARM, {
+          delayInMinutes: backoffMinutes(failureCount),
+        });
+      } catch {
+        // ponytail: backoff alarm is best-effort; the periodic alarm still retries
+      }
     }
   }
 }

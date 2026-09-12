@@ -15,6 +15,8 @@ Load `make dev` output (`.output/chrome-mv3`) as unpacked in Chrome, and `make d
 - [ ] Dark and light X themes both render the panel readably
 - [ ] Fail-soft: temporarily change the anchor selector in a dev build → no panel, no console errors, notes intact
 - [ ] Extension reload while an X tab is open → page keeps working, no uncaught errors (stale-context teardown)
+- [ ] "All notes" link in the profile panel opens the options page (Chrome)
+- [ ] "All notes" link in the profile panel opens the options page (Firefox)
 - [ ] Note badges and hover-card excerpts are not readable from page-world JS (shadow DOM isolation — verify via DevTools console: `document.querySelectorAll('.xn-badge')` returns empty; note text does not appear in light DOM)
 
 ## 2. Service-worker torture (task 9.2)

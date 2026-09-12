@@ -13,7 +13,7 @@ export default defineConfig({
       'https://twitter.com/*',
       'https://www.twitter.com/*',
     ],
-    optional_host_permissions: ['*://*/*'],
+    optional_host_permissions: ['https://*/*'],
     icons: {
       16: 'icons/icon-16.png',
       32: 'icons/icon-32.png',
@@ -25,9 +25,23 @@ export default defineConfig({
           browser_specific_settings: {
             gecko: {
               id: '{9c4f2a1e-8b3d-4e5f-a6c7-1d2e3f4a5b6c}',
-              strict_min_version: '121.0',
+              strict_min_version: '142.0',
               data_collection_permissions: { required: ['none'] },
             },
+          },
+          action: {
+            theme_icons: [
+              {
+                light: 'icons/icon-16-dark.png',
+                dark: 'icons/icon-16-light.png',
+                size: 16,
+              },
+              {
+                light: 'icons/icon-32-dark.png',
+                dark: 'icons/icon-32-light.png',
+                size: 32,
+              },
+            ],
           },
         }
       : {}),

@@ -4,7 +4,7 @@
 
 ### Requirement: Single codebase, two engine builds
 
-The project SHALL build from one codebase, via WXT, into a Chromium MV3 extension (`background.service_worker`) and a Firefox MV3 extension (`background.scripts` event page with `browser_specific_settings.gecko.id` and `strict_min_version` ≥ 121). The build SHALL be driven by `wxt build` / `wxt build -b firefox` and produce store-ready zips via `wxt zip` / `wxt zip -b firefox` (the Firefox zip accompanied by a sources zip and build instructions per AMO policy).
+The project SHALL build from one codebase, via WXT, into a Chromium MV3 extension (`background.service_worker`) and a Firefox MV3 extension (`background.scripts` event page with `browser_specific_settings.gecko.id` and `strict_min_version` ≥ 142, the floor for the manifest keys used). The build SHALL be driven by `wxt build` / `wxt build -b firefox` and produce store-ready zips via `wxt zip` / `wxt zip -b firefox` (the Firefox zip accompanied by a sources zip and build instructions per AMO policy).
 
 #### Scenario: Both targets build
 

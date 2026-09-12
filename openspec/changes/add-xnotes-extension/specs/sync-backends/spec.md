@@ -79,7 +79,7 @@ Sync settings SHALL provide a "Test connection" action that runs `probe()` and r
 
 ### Requirement: Runtime host permission acquisition
 
-Because sync endpoints are arbitrary user-chosen origins, the manifest SHALL declare `optional_host_permissions: ["*://*/*"]`, and saving sync settings SHALL request host permission for the endpoint origin at runtime (within the user gesture). If the user denies, the settings SHALL NOT be activated and the UI SHALL explain why.
+Because sync endpoints are arbitrary user-chosen HTTPS origins (HTTP is rejected by endpoint validation), the manifest SHALL declare `optional_host_permissions: ["https://*/*"]`, and saving sync settings SHALL request host permission for the endpoint origin at runtime (within the user gesture). If the user denies, the settings SHALL NOT be activated and the UI SHALL explain why.
 
 #### Scenario: Permission granted on save
 

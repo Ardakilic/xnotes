@@ -116,6 +116,7 @@ describe('put', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(req(0).method).toBe('PUT');
     expect(req(0).headers.get('if-match')).toBe('"abc"');
+    expect(req(0).redirect).toBe('error');
   });
 
   it('throws SyncConflictError on 412', async () => {

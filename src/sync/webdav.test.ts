@@ -205,6 +205,23 @@ describe('put', () => {
   });
 });
 
+describe('redirect handling', () => {
+  const body = new TextEncoder().encode('{"v":1}');
+
+  it('refuses redirects: fetch is called with redirect error mode', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: '"v2"' } }));
+    await new WebdavAdapter(settings).put(body);
+    expect(call(0).init.redirect).toBe('error');
+  });
+
+  it('surfaces a rejected redirect as SyncUnreachableError', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const promise = new WebdavAdapter(settings).put(body);
+    await expect(promise).rejects.toThrow(SyncUnreachableError);
+    await expect(promise).rejects.toThrow('redirects are refused');
+  });
+});
+
 describe('url construction', () => {
   it('defaults the path and tolerates a trailing slash', async () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 200 }));

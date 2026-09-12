@@ -13,8 +13,10 @@ import { decryptStore, encryptStore, isEnvelope } from './crypto';
 import {
   allowPlaintextOverwriteOnce,
   backoffMinutes,
+  BACKOFF_ALARM,
   forceNextPush,
   initScheduler,
+  isPassphraseSet,
   runCycle,
   setAdapterFactoryForTests,
   setPassphrase,
@@ -220,6 +222,32 @@ describe('conflict retry', () => {
     expect(fake.puts).toHaveLength(0);
     expect((await getStore()).notes['jack']?.text).toBe('mine');
   });
+
+  it('retries the not-found create PUT when it conflicts once', async () => {
+    await saveSettings(settingsOf({}));
+    await upsertNote('jack', 'mine', null, 9000);
+    fake.putFailures = ['conflict'];
+    await runCycle();
+    const state = await getSyncState();
+    expect(state.status).toBe('idle');
+    expect(fake.puts).toHaveLength(1);
+    expect(fake.puts[0]!.opts).toEqual({ ifNoneMatch: '*' });
+    expect((await getStore()).notes['jack']?.text).toBe('mine');
+  });
+
+  it('retries the 304 fast-path PUT when it conflicts once', async () => {
+    await saveSettings(settingsOf({}));
+    await upsertNote('jack', 'v1', null, 9000);
+    await runCycle();
+    fake.putFailures = ['conflict'];
+    await upsertNote('jack', 'v2', null, 9500);
+    await runCycle();
+    const state = await getSyncState();
+    expect(state.status).toBe('idle');
+    expect(fake.puts).toHaveLength(2);
+    const pushed = toStoreV2(JSON.parse(new TextDecoder().decode(fake.puts[1]!.bytes)));
+    expect(pushed?.notes['jack']?.text).toBe('v2');
+  });
 });
 
 describe('single-flight', () => {
@@ -271,6 +299,34 @@ describe('errors and backoff', () => {
     const state = await getSyncState();
     expect(state.status).toBe('error');
     expect(state.lastError).toContain('Authentication failed');
+  });
+
+  it('does not schedule a backoff alarm for auth errors', async () => {
+    await saveSettings(settingsOf({}));
+    fake.getError = new SyncAuthError('401');
+    await runCycle();
+    const state = await getSyncState();
+    expect(state.status).toBe('error');
+    expect(state.lastError).toContain('Authentication');
+    expect(await fakeBrowser.alarms.get(BACKOFF_ALARM)).toBeUndefined();
+  });
+
+  it('clears a pending backoff alarm when an auth error surfaces', async () => {
+    await saveSettings(settingsOf({}));
+    await fakeBrowser.alarms.create(BACKOFF_ALARM, { delayInMinutes: 2 });
+    fake.getError = new SyncAuthError('401');
+    await runCycle();
+    const state = await getSyncState();
+    expect(state.status).toBe('error');
+    expect(state.lastError).toContain('Authentication');
+    expect(await fakeBrowser.alarms.get(BACKOFF_ALARM)).toBeUndefined();
+  });
+
+  it('schedules a backoff alarm for non-auth errors', async () => {
+    await saveSettings(settingsOf({}));
+    fake.getError = new SyncUnreachableError('network down');
+    await runCycle();
+    expect(await fakeBrowser.alarms.get(BACKOFF_ALARM)).toBeDefined();
   });
 
   it('backoff doubles and caps at 60 minutes', () => {
@@ -395,6 +451,112 @@ describe('encryption', () => {
     expect(fake.puts).toHaveLength(2);
     expect(isEnvelope(fake.puts[1]!.bytes)).toBe(true);
     expect((await getSyncState()).status).toBe('idle');
+  });
+
+  it('merges a remote changed under the old passphrase when the passphrase changed', async () => {
+    await saveSettings(settingsOf({ encryptionEnabled: true }));
+    setPassphrase('passphrase-A');
+    await upsertNote('jack', 'local note', null, 9000);
+    fake.remote = {
+      bytes: await encryptStore(note('remoteuser', 5000), 'passphrase-A'),
+      etag: 'e0',
+    };
+    await runCycle();
+    expect(fake.puts).toHaveLength(1);
+
+    fake.remote = {
+      bytes: await encryptStore(note('otherdevice', 6000), 'passphrase-A'),
+      etag: 'e1',
+    };
+    forceNextPush();
+    setPassphrase('passphrase-B');
+    await runCycle();
+
+    const state = await getSyncState();
+    expect(state.status).toBe('idle');
+    expect(fake.puts).toHaveLength(2);
+    const bytes = fake.puts[1]!.bytes;
+    expect(isEnvelope(bytes)).toBe(true);
+    const decrypted = toStoreV2(await decryptStore(bytes, 'passphrase-B'));
+    expect(decrypted?.notes['jack']?.text).toBe('local note');
+    expect(decrypted?.notes['otherdevice']).toBeDefined();
+    expect(decrypted?.notes['remoteuser']).toBeDefined();
+    await expect(decryptStore(bytes, 'passphrase-A')).rejects.toBeInstanceOf(SyncDecodeError);
+    expect((await getStore()).notes['otherdevice']).toBeDefined();
+  });
+
+  it('retains fallbacks across an A→B→C change when cycles keep failing, and survives a middle-value loss', async () => {
+    await saveSettings(settingsOf({ encryptionEnabled: true }));
+    setPassphrase('passphrase-A');
+    await upsertNote('jack', 'local note', null, 9000);
+    fake.remote = {
+      bytes: await encryptStore(note('remoteuser', 5000), 'passphrase-A'),
+      etag: 'e0',
+    };
+    await runCycle();
+    expect(fake.puts).toHaveLength(1);
+
+    fake.getError = new SyncUnreachableError('network down');
+    setPassphrase('passphrase-B');
+    await runCycle();
+    expect((await getSyncState()).status).toBe('error');
+
+    setPassphrase('passphrase-C');
+    await runCycle();
+    expect((await getSyncState()).status).toBe('error');
+
+    fake.getError = null;
+    fake.remote = {
+      bytes: await encryptStore(note('otherdevice', 6000), 'passphrase-A'),
+      etag: 'e1',
+    };
+    forceNextPush();
+    await runCycle();
+
+    const state = await getSyncState();
+    expect(state.status).toBe('idle');
+    expect(fake.puts).toHaveLength(2);
+    const bytes = fake.puts[1]!.bytes;
+    const decrypted = toStoreV2(await decryptStore(bytes, 'passphrase-C'));
+    expect(decrypted?.notes['jack']?.text).toBe('local note');
+    expect(decrypted?.notes['otherdevice']).toBeDefined();
+    expect(decrypted?.notes['remoteuser']).toBeDefined();
+    await expect(decryptStore(bytes, 'passphrase-A')).rejects.toBeInstanceOf(SyncDecodeError);
+  });
+
+  it('converts the remote to plaintext when encryption is disabled with a changed remote', async () => {
+    await saveSettings(settingsOf({ encryptionEnabled: true }));
+    setPassphrase('pw');
+    await upsertNote('jack', 'local note', null, 9000);
+    fake.remote = { bytes: await encryptStore(note('remoteuser', 5000), 'pw'), etag: 'e0' };
+    await runCycle();
+    expect(fake.puts).toHaveLength(1);
+
+    fake.remote = { bytes: await encryptStore(note('otherdevice', 6000), 'pw'), etag: 'e1' };
+    await saveSettings(settingsOf({ encryptionEnabled: false }));
+    forceNextPush();
+    await runCycle();
+
+    const state = await getSyncState();
+    expect(state.status).toBe('idle');
+    expect(fake.puts).toHaveLength(2);
+    expect(isEnvelope(fake.puts[1]!.bytes)).toBe(false);
+    const pushed = toStoreV2(JSON.parse(new TextDecoder().decode(fake.puts[1]!.bytes)));
+    expect(pushed?.notes['jack']?.text).toBe('local note');
+    expect(pushed?.notes['otherdevice']).toBeDefined();
+  });
+
+  it('treats an empty passphrase as unset', async () => {
+    setPassphrase('pw');
+    setPassphrase('');
+    expect(isPassphraseSet()).toBe(false);
+    await saveSettings(settingsOf({ encryptionEnabled: true }));
+    fake.remote = { bytes: await encryptStore(note('secret', 5000), 'pw'), etag: 'e0' };
+    await runCycle();
+    const state = await getSyncState();
+    expect(state.status).toBe('error');
+    expect(state.lastError).toContain('passphrase');
+    expect(fake.puts).toHaveLength(0);
   });
 });
 

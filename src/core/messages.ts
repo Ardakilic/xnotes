@@ -6,7 +6,8 @@ export type BackgroundRequest =
   | { type: 'set-passphrase'; passphrase: string | null }
   | { type: 'overwrite-remote-plaintext' }
   | { type: 'encryption-changed' }
-  | { type: 'backend-activated' };
+  | { type: 'backend-activated' }
+  | { type: 'open-options' };
 
 export interface SyncStatusResponse {
   state: import('./types').SyncState;
@@ -31,6 +32,7 @@ const MESSAGE_TYPES = [
   'overwrite-remote-plaintext',
   'encryption-changed',
   'backend-activated',
+  'open-options',
 ] as const;
 
 type SimpleMessageType = (typeof MESSAGE_TYPES)[number];
