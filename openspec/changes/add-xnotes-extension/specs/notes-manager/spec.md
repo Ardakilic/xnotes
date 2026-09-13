@@ -74,7 +74,7 @@ The page SHALL provide "Export JSON" (downloads the backup file per the notes-st
 #### Scenario: Backup round-trip
 
 - **WHEN** the user exports, wipes local data, and imports the file in merge mode
-- **THEN** all notes, including colors and timestamps, are restored
+- **THEN** all notes, including colors and timestamps, are restored together with the formerly-known-handle context for renamed notes
 
 #### Scenario: Invalid import rejected
 

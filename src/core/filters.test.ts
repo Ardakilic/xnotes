@@ -65,4 +65,39 @@ describe('filterNotes', () => {
     expect(filterNotes(identified, '', new Set(['red'])).map((n) => n.handle)).toEqual(['alice']);
     expect(filterNotes(identified, '', new Set())).toHaveLength(2);
   });
+
+  it('matches by full user ID', () => {
+    const identified: NoteRecord[] = [
+      { ...note('alice', 'ship it', 'red', 300), userId: '12345' },
+      { ...note('bob', 'notes about whales', 'blue', 100), userId: '67890' },
+    ];
+    expect(filterNotes(identified, '12345', new Set()).map((n) => n.handle)).toEqual(['alice']);
+  });
+
+  it('matches by partial user ID', () => {
+    const identified: NoteRecord[] = [
+      { ...note('alice', 'ship it', 'red', 300), userId: '12345' },
+      { ...note('bob', 'notes about whales', 'blue', 100), userId: '67890' },
+    ];
+    expect(filterNotes(identified, '234', new Set()).map((n) => n.handle)).toEqual(['alice']);
+  });
+
+  it('does not match notes without a userId on an ID query', () => {
+    const mixed: NoteRecord[] = [
+      { ...note('alice', 'ship it', 'red', 300), userId: '12345' },
+      note('carol', 'plain', null, 200),
+    ];
+    expect(filterNotes(mixed, '12345', new Set()).map((n) => n.handle)).toEqual(['alice']);
+    expect(filterNotes(mixed, '99999', new Set())).toHaveLength(0);
+  });
+
+  it('combines user ID query with color filter', () => {
+    const identified: NoteRecord[] = [
+      { ...note('alice', 'ship it', 'red', 300), userId: '12345' },
+      { ...note('bob', 'ship it too', 'blue', 100), userId: '12399' },
+    ];
+    expect(filterNotes(identified, '123', new Set(['red'])).map((n) => n.handle)).toEqual([
+      'alice',
+    ]);
+  });
 });

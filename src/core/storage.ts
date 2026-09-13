@@ -173,7 +173,8 @@ function normalizeHandle(handle: string): string {
  * Create or update the note under `handle` (whitespace-only text deletes).
  * A digits-only `userId` attaches the stable X user ID to the note; when
  * omitted or invalid the existing note's ID is preserved so edits never
- * strip learned identity. The empty-text delete path is unchanged.
+ * strip learned identity, while an empty string clears it. The empty-text
+ * delete path is unchanged.
  */
 export async function upsertNote(
   handle: string,
@@ -208,7 +209,7 @@ export async function upsertNote(
   };
   if (typeof userId === 'string' && /^\d+$/.test(userId)) {
     next.userId = userId;
-  } else if (existing?.userId !== undefined) {
+  } else if (userId !== '' && existing?.userId !== undefined) {
     next.userId = existing.userId;
   }
   store.notes[handleLower] = next;
@@ -278,6 +279,81 @@ export async function reassignNote(
   store.tombstones[sourceLower] = timestamp;
   await saveStore(store);
   return 'moved';
+}
+
+/** Result of a manager handle-rename move. */
+export type RenameResult = 'renamed' | 'target-occupied' | 'nothing-to-move';
+
+/**
+ * Move the note at `sourceHandle` to `targetHandle` in one store read + one
+ * store write (plus one alias write only when transferring): carry
+ * text/color/createdAt under the new key with a fresh updatedAt, tombstone
+ * the source, and clear any tombstone on the target. Identity resolves from
+ * the target handle's learned alias when one exists, else the moved note
+ * omits userId so the next profile visit re-learns it — the source note's
+ * ID is never carried, since the target may belong to an unrelated account.
+ * A typo'd manager rename otherwise strands the note: the alias-driven
+ * visit follow only consults aliases, so the source's alias observation is
+ * transferred (copied, source retained) to the target when the source has
+ * one and the target has none — never overwriting an existing target alias
+ * with a possibly-typo'd claim, never inventing an ID when the source has
+ * none. The empty-text delete path tombstones without creating a target and
+ * writes no alias. 'target-occupied' and 'nothing-to-move' write nothing.
+ * Never throws beyond saveStore's StorageWriteError (alias writes are
+ * fail-soft bookkeeping).
+ */
+export async function renameNote(
+  sourceHandle: string,
+  targetHandle: string,
+  text: string,
+  color: ColorKey | null,
+  now?: number,
+): Promise<RenameResult> {
+  const source = normalizeHandle(sourceHandle);
+  const target = normalizeHandle(targetHandle);
+  if (source === '' || target === '') return 'nothing-to-move';
+  const sourceLower = source.toLowerCase();
+  const targetLower = target.toLowerCase();
+  if (sourceLower === targetLower) return 'nothing-to-move';
+  const timestamp = now ?? Date.now();
+  const raw = await safeRead(STORE_KEY);
+  if (!raw.ok) return 'nothing-to-move';
+  const store = raw.value === undefined ? emptyStore() : (toStoreV2(raw.value) ?? emptyStore());
+  const existing = store.notes[sourceLower];
+  if (existing === undefined) return 'nothing-to-move';
+  if (store.notes[targetLower] !== undefined) return 'target-occupied';
+  delete store.notes[sourceLower];
+  store.tombstones[sourceLower] = timestamp;
+  if (text.trim() === '') {
+    await saveStore(store);
+    return 'renamed';
+  }
+  const next: NoteRecord = {
+    handle: target,
+    handleLower: targetLower,
+    text,
+    color,
+    createdAt: existing.createdAt,
+    updatedAt: timestamp,
+  };
+  const aliasRead = await getAliases();
+  const sourceAlias = aliasRead.ok ? aliasRead.aliases[sourceLower] : undefined;
+  const targetAlias = aliasRead.ok ? aliasRead.aliases[targetLower] : undefined;
+  let transfer = false;
+  if (aliasRead.ok && sourceAlias !== undefined && targetAlias === undefined) {
+    aliasRead.aliases[targetLower] = {
+      userId: sourceAlias.userId,
+      observedAt: sourceAlias.observedAt,
+    };
+    transfer = true;
+  }
+  const aliasUserId = targetAlias?.userId ?? (transfer ? sourceAlias?.userId : undefined);
+  if (aliasUserId !== undefined) next.userId = aliasUserId;
+  store.notes[targetLower] = next;
+  delete store.tombstones[targetLower];
+  await saveStore(store);
+  if (transfer) await saveAliases(aliasRead.aliases);
+  return 'renamed';
 }
 
 export function subscribeToStoreChanges(cb: () => void): () => void {

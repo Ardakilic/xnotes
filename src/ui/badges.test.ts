@@ -125,6 +125,35 @@ describe('injectHoverCardNote', () => {
     injectHoverCardNote(document, { jack: makeNote('jack', null) });
     expect(document.querySelectorAll('div[data-xn-hover]').length).toBe(0);
   });
+
+  it('applies the note color accent class to the hover pill', () => {
+    document.body.innerHTML =
+      '<div data-testid="HoverCard"><a href="https://x.com/jack">Jack</a></div>';
+    injectHoverCardNote(document, { jack: makeNote('jack', 'teal', 'colored') });
+    expect(document.querySelector('div[data-xn-hover]')?.classList.contains('xn-accent-teal')).toBe(
+      true,
+    );
+  });
+
+  it('leaves the hover pill without an accent class when color is null', () => {
+    document.body.innerHTML =
+      '<div data-testid="HoverCard"><a href="https://x.com/jack">Jack</a></div>';
+    injectHoverCardNote(document, { jack: makeNote('jack', null) });
+    const host = document.querySelector('div[data-xn-hover]');
+    expect(host).not.toBeNull();
+    expect(host?.getAttribute('class') ?? '').not.toContain('xn-accent');
+  });
+
+  it('keeps a single accented pill on re-render', () => {
+    document.body.innerHTML =
+      '<div data-testid="HoverCard"><a href="https://x.com/jack">Jack</a></div>';
+    const notes = { jack: makeNote('jack', 'red') };
+    injectHoverCardNote(document, notes);
+    injectHoverCardNote(document, notes);
+    const hosts = document.querySelectorAll('div[data-xn-hover]');
+    expect(hosts.length).toBe(1);
+    expect(hosts.item(0)?.classList.contains('xn-accent-red')).toBe(true);
+  });
 });
 
 describe('notes carrying userId', () => {

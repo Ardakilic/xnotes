@@ -33,10 +33,23 @@ function labeled(
   labelText: string,
   input: HTMLInputElement | HTMLSelectElement,
   errorSlot: HTMLElement,
+  hintText: string = '',
 ): HTMLElement {
   const label = el('label', 'field');
+  if (input instanceof HTMLInputElement && input.type === 'checkbox') {
+    label.classList.add('field-checkbox');
+  }
   label.append(labelText, input, errorSlot);
+  if (hintText !== '') label.append(el('span', 'field-hint', hintText));
   return label;
+}
+
+function externalLink(label: string, href: string): HTMLAnchorElement {
+  const link = el('a', undefined, label);
+  link.href = href;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  return link;
 }
 
 export function mountSettings(root: HTMLElement): void {
@@ -48,10 +61,11 @@ export function mountSettings(root: HTMLElement): void {
     key: string,
     labelText: string,
     input: HTMLInputElement,
+    hintText: string = '',
   ): HTMLElement {
     const slot = el('span', 'field-error');
     errorSlots.set(`${backend}:${key}`, slot);
-    return labeled(labelText, input, slot);
+    return labeled(labelText, input, slot, hintText);
   }
 
   const backendSelect = el('select', 'backend-select');
@@ -111,10 +125,22 @@ export function mountSettings(root: HTMLElement): void {
     field('s3', 'endpoint', 'Endpoint', s3Endpoint),
     field('s3', 'region', 'Region', s3Region),
     field('s3', 'bucket', 'Bucket', s3Bucket),
-    field('s3', 'prefix', 'Key prefix', s3Prefix),
+    field(
+      's3',
+      'prefix',
+      'Key prefix',
+      s3Prefix,
+      'Prepended to object keys like a folder (e.g. xnotes/); leave empty to store at the bucket root.',
+    ),
     field('s3', 'accessKey', 'Access key', s3AccessKey),
     field('s3', 'secretKey', 'Secret key', s3SecretKey),
-    labeled('Path-style URLs (self-hosted endpoints)', s3PathStyle, el('span', 'field-error')),
+    labeled(
+      'Path-style URLs (self-hosted endpoints)',
+      s3PathStyle,
+      el('span', 'field-error'),
+      'On sends https://endpoint/bucket/key, off sends https://bucket.endpoint/key. ' +
+        'S3-compatible stores (Backblaze B2, MinIO) often need on; AWS S3 prefers off.',
+    ),
     labeled(
       'Provider lacks conditional writes (e.g. Backblaze B2)',
       s3ForceHead,
@@ -140,10 +166,8 @@ export function mountSettings(root: HTMLElement): void {
   const saveBtn = el('button', undefined, 'Save');
   saveBtn.type = 'button';
 
-  root.append(
-    labeled('Sync backend', backendSelect, el('span', 'field-error')),
-    webdavFields,
-    s3Fields,
+  const syncOnly = el('div', 'sync-only');
+  syncOnly.append(
     labeled('Sync interval (minutes)', intervalInput, el('span', 'field-error')),
     labeled('Encrypt notes before sync', encryptionToggle, el('span', 'field-error')),
     labeled('Passphrase', passphraseInput, el('span', 'field-error')),
@@ -154,8 +178,26 @@ export function mountSettings(root: HTMLElement): void {
     ),
     testBtn,
     testResult,
+  );
+
+  const footer = el('footer', 'settings-footer');
+  footer.append(
+    'crafted by Arda Kılıçdağı · ',
+    externalLink('Website', 'https://arda.pw'),
+    ' · ',
+    externalLink('X', 'https://x.com/ardadev'),
+    ' · ',
+    externalLink('Source code', 'https://github.com/Ardakilic/xnotes'),
+  );
+
+  root.append(
+    labeled('Sync backend', backendSelect, el('span', 'field-error')),
+    webdavFields,
+    s3Fields,
+    syncOnly,
     saveBtn,
     messageArea,
+    footer,
   );
 
   const allControls: Array<HTMLInputElement | HTMLSelectElement | HTMLButtonElement> = [
@@ -183,6 +225,7 @@ export function mountSettings(root: HTMLElement): void {
   function syncVisibility(): void {
     webdavFields.hidden = backendSelect.value !== 'webdav';
     s3Fields.hidden = backendSelect.value !== 's3';
+    syncOnly.hidden = backendSelect.value === 'none';
   }
 
   backendSelect.addEventListener('change', syncVisibility);

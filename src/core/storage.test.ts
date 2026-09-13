@@ -5,11 +5,13 @@ import {
   CORRUPT_PREFIX,
   deleteNote,
   emptyStore,
+  getAliases,
   getSettings,
   getStore,
   getSyncState,
   getView,
   reassignNote,
+  renameNote,
   saveAliases,
   saveSettings,
   saveStore,
@@ -323,6 +325,146 @@ describe('reassignNote', () => {
     const store = await getStore();
     expect(store.notes['jack']?.text).toBe('hi');
     expect(store.tombstones['jack']).toBeUndefined();
+  });
+});
+
+describe('renameNote', () => {
+  it('carries the full record, tombstones the source, and clears the target tombstone', async () => {
+    await upsertNote('old', 'hello', 'red', 100, '123');
+    const seeded = await getStore();
+    seeded.tombstones['new'] = 150;
+    await saveStore(seeded);
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set');
+    expect(await renameNote('old', 'New', 'edited', 'blue', 200)).toBe('renamed');
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['old']).toBeUndefined();
+    expect(store.tombstones['old']).toBe(200);
+    expect(store.notes['new']).toEqual({
+      handle: 'New',
+      handleLower: 'new',
+      text: 'edited',
+      color: 'blue',
+      createdAt: 100,
+      updatedAt: 200,
+    });
+    expect(store.tombstones['new']).toBeUndefined();
+  });
+
+  it('never overwrites an existing target alias and writes no alias in that case', async () => {
+    await saveAliases({ target: { userId: '123', observedAt: 50 } });
+    await upsertNote('old', 'hello', null, 100, '999');
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set');
+    expect(await renameNote('old', 'target', 'hello', null, 200)).toBe('renamed');
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+    expect((await getStore()).notes['target']?.userId).toBe('123');
+    expect(await getAliases()).toEqual({
+      aliases: { target: { userId: '123', observedAt: 50 } },
+      ok: true,
+    });
+  });
+
+  it('transfers the source alias to a fresh target, retaining the source', async () => {
+    await saveAliases({ old: { userId: '786', observedAt: 50 } });
+    await upsertNote('old', 'hello', null, 100, '999');
+    expect(await renameNote('old', 'theo88', 'hello', null, 200)).toBe('renamed');
+    expect((await getStore()).notes['theo88']?.userId).toBe('786');
+    expect(await getAliases()).toEqual({
+      aliases: {
+        old: { userId: '786', observedAt: 50 },
+        theo88: { userId: '786', observedAt: 50 },
+      },
+      ok: true,
+    });
+  });
+
+  it('keeps the target alias when both handles were observed (no overwrite)', async () => {
+    await saveAliases({
+      old: { userId: '111', observedAt: 50 },
+      target: { userId: '222', observedAt: 60 },
+    });
+    await upsertNote('old', 'hello', null, 100, '111');
+    expect(await renameNote('old', 'target', 'hello', null, 200)).toBe('renamed');
+    expect((await getStore()).notes['target']?.userId).toBe('222');
+    expect(await getAliases()).toEqual({
+      aliases: {
+        old: { userId: '111', observedAt: 50 },
+        target: { userId: '222', observedAt: 60 },
+      },
+      ok: true,
+    });
+  });
+
+  it('writes no alias on the empty-text delete path', async () => {
+    await saveAliases({ old: { userId: '786', observedAt: 50 } });
+    await upsertNote('old', 'hello', null, 100, '786');
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set');
+    expect(await renameNote('old', 'new', '   ', null, 200)).toBe('renamed');
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['new']).toBeUndefined();
+    expect(await getAliases()).toEqual({
+      aliases: { old: { userId: '786', observedAt: 50 } },
+      ok: true,
+    });
+  });
+
+  it('stamps the target alias ID instead of the stale source ID', async () => {
+    await saveAliases({ target: { userId: '123', observedAt: 50 } });
+    await upsertNote('old', 'hello', null, 100, '999');
+    expect(await renameNote('old', 'target', 'hello', null, 200)).toBe('renamed');
+    expect((await getStore()).notes['target']?.userId).toBe('123');
+  });
+
+  it('omits userId when no alias is recorded for the target', async () => {
+    await upsertNote('old', 'hello', null, 100, '999');
+    expect(await renameNote('old', 'fresh', 'hello', null, 200)).toBe('renamed');
+    expect((await getStore()).notes['fresh']?.userId).toBeUndefined();
+  });
+
+  it('refuses a populated target without writing', async () => {
+    await upsertNote('old', 'orphan', null, 100, '111');
+    await upsertNote('taken', 'kept', 'red', 150, '222');
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set');
+    expect(await renameNote('old', 'TAKEN', 'orphan', null, 200)).toBe('target-occupied');
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['taken']?.text).toBe('kept');
+    expect(store.notes['old']?.text).toBe('orphan');
+    expect(store.tombstones['old']).toBeUndefined();
+  });
+
+  it('returns nothing-to-move for missing sources and invalid or identical handles', async () => {
+    await upsertNote('jack', 'hi', null, 100);
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set');
+    expect(await renameNote('ghost', 'new', 'hi', null, 200)).toBe('nothing-to-move');
+    for (const [source, target] of [
+      ['', 'new'],
+      ['@', 'new'],
+      ['jack', ''],
+      ['jack', 'JACK'],
+      ['jack', 'jack'],
+    ] as const) {
+      expect(await renameNote(source, target, 'hi', null, 200)).toBe('nothing-to-move');
+    }
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['jack']?.text).toBe('hi');
+    expect(store.tombstones['jack']).toBeUndefined();
+  });
+
+  it('tombstones the source without creating the target on empty text', async () => {
+    await upsertNote('old', 'hello', null, 100, '123');
+    expect(await renameNote('old', 'new', '   ', null, 200)).toBe('renamed');
+    const store = await getStore();
+    expect(store.notes['old']).toBeUndefined();
+    expect(store.notes['new']).toBeUndefined();
+    expect(store.tombstones['old']).toBe(200);
   });
 });
 

@@ -1,4 +1,5 @@
 import type { NoteRecord } from '../core/types';
+import { COLOR_KEYS } from '../core/colors';
 import { getAlias, type AliasStore } from '../core/aliases';
 import { parseProfile } from '../core/profile';
 
@@ -111,11 +112,15 @@ const HOVER_STYLE = `
   margin-top: 8px;
   padding: 8px 12px;
   border-radius: 8px;
+  border-left: 4px solid var(--xn-accent, #cfd9de);
   background: var(--xn-hover-bg, rgba(15, 20, 25, 0.05));
   color: var(--xn-hover-fg, #536471);
   font: 13px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+:host-context(.xn-dark) .xn-hover-note {
+  border-left-color: var(--xn-accent, #2f3336);
 }
 `;
 
@@ -128,6 +133,9 @@ export function injectHoverCardNote(doc: Document, notes: Record<string, NoteRec
     const host = doc.createElement('div');
     host.setAttribute('data-xn-hover', '');
     host.style.cssText = 'display:block;padding:0 16px 12px;';
+    for (const key of COLOR_KEYS) host.classList.remove(`xn-accent-${key}`);
+    const colorClass = note.color === null ? '' : `xn-accent-${note.color}`;
+    if (colorClass !== '') host.classList.add(colorClass);
     const root = host.attachShadow({ mode: 'closed' });
     const style = doc.createElement('style');
     style.textContent = HOVER_STYLE;

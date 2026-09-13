@@ -2,7 +2,16 @@
 import { fakeBrowser } from 'wxt/testing/fake-browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emptyAliases, recordObservation } from '../../src/core/aliases';
-import { getStore, saveAliases, saveStore, toStoreV2, upsertNote } from '../../src/core/storage';
+import { parseImportFile } from '../../src/core/import-export';
+import {
+  getAliases,
+  getStore,
+  renameNote,
+  saveAliases,
+  saveStore,
+  toStoreV2,
+  upsertNote,
+} from '../../src/core/storage';
 import type { ColorKey } from '../../src/core/colors';
 import type { NoteRecord, StoreV2 } from '../../src/core/types';
 import { buildExport, chooseImportAction, mountManager } from './manager';
@@ -12,8 +21,18 @@ function makeNote(
   text: string,
   color: ColorKey | null,
   updatedAt: number,
+  userId?: string,
 ): NoteRecord {
-  return { handle, handleLower: handle.toLowerCase(), text, color, createdAt: 1, updatedAt };
+  const note: NoteRecord = {
+    handle,
+    handleLower: handle.toLowerCase(),
+    text,
+    color,
+    createdAt: 1,
+    updatedAt,
+  };
+  if (userId !== undefined) note.userId = userId;
+  return note;
 }
 
 function storeWith(notes: NoteRecord[]): StoreV2 {
@@ -155,6 +174,25 @@ describe('search and color filter wiring', () => {
     expect(root.textContent).toContain('@jack');
   });
 
+  it('filters by user ID and advertises it in the search placeholder', async () => {
+    const root = await mount([
+      makeNote('jack', 'hello', null, 100, '12345'),
+      makeNote('alice', 'world', null, 200, '67890'),
+      makeNote('carol', 'plain', null, 300),
+    ]);
+    const search = root.querySelector<HTMLInputElement>('.manager-search');
+    expect(search).not.toBeNull();
+    if (search === null) return;
+    expect(search.placeholder).toBe('Search by profile, note text, or user ID');
+    search.value = '234';
+    search.dispatchEvent(new Event('input'));
+    await vi.waitFor(() => {
+      expect(root.querySelectorAll('.note-row')).toHaveLength(1);
+    });
+    expect(root.textContent).toContain('@jack');
+    expect(root.textContent).not.toContain('@alice');
+  });
+
   it('toggles color chips and widens with multi-select', async () => {
     const root = await mount([
       makeNote('jack', 'hello', 'red', 100),
@@ -234,6 +272,220 @@ describe('inline edit', () => {
   });
 });
 
+describe('user ID display', () => {
+  it('shows the user ID in a table column with an em-dash fallback', async () => {
+    const root = await mount([
+      makeNote('jack', 'hello', null, 100, '123'),
+      makeNote('alice', 'world', null, 200),
+    ]);
+    expect(root.querySelector('.notes-table thead')?.textContent).toContain('User ID');
+    expect(rowWith(root, '@jack').querySelector('td.note-userid')?.textContent).toBe('123');
+    expect(rowWith(root, '@alice').querySelector('td.note-userid')?.textContent).toBe('—');
+  });
+
+  it('shows the user ID in cards with an em-dash fallback', async () => {
+    const root = await mount([
+      makeNote('jack', 'hello', null, 100, '123'),
+      makeNote('alice', 'world', null, 200),
+    ]);
+    button(root, 'Cards').click();
+    await vi.waitFor(() => {
+      expect(root.querySelectorAll('.note-card')).toHaveLength(2);
+    });
+    const cards = [...root.querySelectorAll<HTMLElement>('.note-card')];
+    const jack = cards.find((c) => c.textContent?.includes('@jack'));
+    const alice = cards.find((c) => c.textContent?.includes('@alice'));
+    expect(jack?.querySelector('.note-userid')?.textContent).toContain('123');
+    expect(alice?.querySelector('.note-userid')?.textContent).toContain('—');
+  });
+});
+
+describe('user ID edit', () => {
+  async function openEdit(root: HTMLElement): Promise<HTMLInputElement> {
+    button(root, 'Edit').click();
+    await vi.waitFor(() => {
+      expect(root.querySelector('input.edit-userid')).not.toBeNull();
+    });
+    const input = root.querySelector<HTMLInputElement>('input.edit-userid');
+    if (input === null) throw new Error('user ID input not found');
+    return input;
+  }
+
+  it('prefills the current user ID and persists a new one through Save', async () => {
+    const root = await mount([makeNote('jack', 'hello', null, 100, '123')]);
+    const input = await openEdit(root);
+    expect(input.value).toBe('123');
+    input.value = '456';
+    button(root, 'Save').click();
+    await vi.waitFor(async () => {
+      expect((await getStore()).notes['jack']?.userId).toBe('456');
+    });
+  });
+
+  it('clears the user ID when the field is emptied', async () => {
+    const root = await mount([makeNote('jack', 'hello', null, 100, '123')]);
+    const input = await openEdit(root);
+    input.value = '';
+    button(root, 'Save').click();
+    await vi.waitFor(async () => {
+      expect((await getStore()).notes['jack']?.userId).toBeUndefined();
+    });
+  });
+
+  it('rejects a non-digits user ID without saving', async () => {
+    const alerts = stubAlert();
+    const root = await mount([makeNote('jack', 'hello', null, 100, '123')]);
+    const input = await openEdit(root);
+    input.value = 'abc';
+    button(root, 'Save').click();
+    await vi.waitFor(() => {
+      expect(alerts.some((m) => m.includes('user ID'))).toBe(true);
+    });
+    expect((await getStore()).notes['jack']?.userId).toBe('123');
+    expect(root.querySelector('textarea.edit-text')).not.toBeNull();
+  });
+});
+
+describe('handle edit', () => {
+  async function openRowEdit(root: HTMLElement, label: string): Promise<void> {
+    button(rowWith(root, label), 'Edit').click();
+    await vi.waitFor(() => {
+      expect(root.querySelector('input.edit-handle')).not.toBeNull();
+    });
+  }
+
+  function handleInput(root: ParentNode): HTMLInputElement {
+    const input = root.querySelector<HTMLInputElement>('input.edit-handle');
+    if (input === null) throw new Error('handle input not found');
+    return input;
+  }
+
+  it('prefills the current handle', async () => {
+    const root = await mount([makeNote('jack', 'hello', null, 100)]);
+    await openRowEdit(root, '@jack');
+    expect(handleInput(root).value).toBe('jack');
+  });
+
+  it('renames the note carrying text/color/createdAt, resolving identity from the target alias', async () => {
+    const root = await mount([{ ...makeNote('jack', 'hello', 'red', 200), userId: '123' }]);
+    await saveAliases(recordObservation(emptyAliases(), 'bobby', '123', 50));
+    await openRowEdit(root, '@jack');
+    handleInput(root).value = 'bobby';
+    const textarea = root.querySelector<HTMLTextAreaElement>('textarea.edit-text');
+    if (textarea === null) throw new Error('textarea not found');
+    textarea.value = 'edited through rename';
+    button(root, 'Save').click();
+    await vi.waitFor(async () => {
+      expect((await getStore()).notes['bobby']?.text).toBe('edited through rename');
+    });
+    const store = await getStore();
+    expect(store.notes['jack']).toBeUndefined();
+    expect(store.tombstones['jack']).toBeDefined();
+    expect(store.notes['bobby']).toMatchObject({
+      handle: 'bobby',
+      text: 'edited through rename',
+      color: 'red',
+      userId: '123',
+      createdAt: 1,
+    });
+    await vi.waitFor(() => {
+      expect(root.querySelector('textarea.edit-text')).toBeNull();
+    });
+    expect(root.textContent).toContain('@bobby');
+  });
+
+  it('rename ignores the stale displayed user ID so the next visit re-learns the new owner', async () => {
+    const root = await mount([
+      { ...makeNote('oldhandle', 'moved note', null, 100), userId: '111' },
+    ]);
+    await openRowEdit(root, '@oldhandle');
+    handleInput(root).value = 'newhandle';
+    const userid = root.querySelector<HTMLInputElement>('input.edit-userid');
+    if (userid === null) throw new Error('user ID input not found');
+    expect(userid.value).toBe('111');
+    button(root, 'Save').click();
+    await vi.waitFor(async () => {
+      expect((await getStore()).notes['newhandle']).toBeDefined();
+    });
+    expect((await getStore()).notes['newhandle']?.userId).toBeUndefined();
+  });
+
+  it('rejects an invalid handle without saving', async () => {
+    const alerts = stubAlert();
+    const root = await mount([makeNote('jack', 'hello', null, 100)]);
+    await openRowEdit(root, '@jack');
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set');
+    handleInput(root).value = 'bad handle!';
+    button(root, 'Save').click();
+    await vi.waitFor(() => {
+      expect(alerts.some((m) => m.includes('not valid'))).toBe(true);
+    });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+    expect((await getStore()).notes['jack']?.text).toBe('hello');
+    expect(root.querySelector('textarea.edit-text')).not.toBeNull();
+  });
+
+  it('refuses a duplicate handle case-insensitively without writing', async () => {
+    const alerts = stubAlert();
+    const root = await mount([
+      makeNote('jack', 'hello', null, 100),
+      makeNote('alice', 'world', null, 200),
+    ]);
+    await openRowEdit(root, '@jack');
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set');
+    handleInput(root).value = 'ALICE';
+    button(root, 'Save').click();
+    await vi.waitFor(() => {
+      expect(alerts.some((m) => m.includes('already has a note'))).toBe(true);
+    });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['jack']?.text).toBe('hello');
+    expect(store.notes['alice']?.text).toBe('world');
+    expect(store.tombstones['jack']).toBeUndefined();
+    expect(root.querySelector('textarea.edit-text')).not.toBeNull();
+  });
+
+  it('refuses a duplicate user ID without writing', async () => {
+    const alerts = stubAlert();
+    const root = await mount([
+      { ...makeNote('jack', 'hello', null, 100), userId: '111' },
+      { ...makeNote('alice', 'world', null, 200), userId: '222' },
+    ]);
+    await openRowEdit(root, '@jack');
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set');
+    const userid = root.querySelector<HTMLInputElement>('input.edit-userid');
+    if (userid === null) throw new Error('user ID input not found');
+    userid.value = '222';
+    button(root, 'Save').click();
+    await vi.waitFor(() => {
+      expect(alerts.some((m) => m.includes('already used'))).toBe(true);
+    });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+    expect((await getStore()).notes['jack']?.userId).toBe('111');
+    expect(root.querySelector('textarea.edit-text')).not.toBeNull();
+  });
+
+  it('saves when handle and user ID are unchanged (self excluded)', async () => {
+    const root = await mount([{ ...makeNote('jack', 'hello', null, 100), userId: '123' }]);
+    await openRowEdit(root, '@jack');
+    const textarea = root.querySelector<HTMLTextAreaElement>('textarea.edit-text');
+    if (textarea === null) throw new Error('textarea not found');
+    textarea.value = 'same handle, new text';
+    button(root, 'Save').click();
+    await vi.waitFor(async () => {
+      expect((await getStore()).notes['jack']?.text).toBe('same handle, new text');
+    });
+    expect((await getStore()).notes['jack']?.userId).toBe('123');
+    await vi.waitFor(() => {
+      expect(root.querySelector('textarea.edit-text')).toBeNull();
+    });
+  });
+});
+
 describe('delete', () => {
   it('deletes after confirmation and writes a tombstone', async () => {
     stubConfirm([true]);
@@ -283,30 +535,39 @@ describe('delete', () => {
 });
 
 describe('export', () => {
-  it('names the file xnotes-backup-YYYYMMDD.json and serializes the store', () => {
+  it('names the file xnotes-backup-YYYYMMDD.json and serializes store plus aliases', () => {
     const store = storeWith([makeNote('jack', 'hello', 'teal', 100)]);
-    const { filename, json } = buildExport(store);
+    const aliases = recordObservation(emptyAliases(), 'oldhandle', '123', 100);
+    const { filename, json } = buildExport(store, aliases);
     expect(filename).toMatch(/^xnotes-backup-\d{8}\.json$/);
     const parsed = JSON.parse(json);
     expect(toStoreV2(parsed)).toEqual(store);
+    expect(parseImportFile(json)?.aliases).toEqual({
+      oldhandle: { userId: '123', observedAt: 100 },
+    });
   });
 });
 
 describe('import', () => {
   const backup = storeWith([makeNote('alice', 'from backup', 'red', 500)]);
+  const backupAliases = recordObservation(emptyAliases(), 'oldhandle', '123', 100);
 
   it('chooseImportAction rejects invalid files and honors the choice', () => {
     expect(chooseImportAction(null, 'merge')).toEqual({ kind: 'invalid' });
-    expect(chooseImportAction(backup, 'abort')).toEqual({ kind: 'abort' });
-    expect(chooseImportAction(backup, 'merge')).toEqual({
+    expect(chooseImportAction({ store: backup, aliases: backupAliases }, 'abort')).toEqual({
+      kind: 'abort',
+    });
+    expect(chooseImportAction({ store: backup, aliases: backupAliases }, 'merge')).toEqual({
       kind: 'apply',
       mode: 'merge',
       store: backup,
+      aliases: backupAliases,
     });
-    expect(chooseImportAction(backup, 'replace')).toEqual({
+    expect(chooseImportAction({ store: backup, aliases: backupAliases }, 'replace')).toEqual({
       kind: 'apply',
       mode: 'replace',
       store: backup,
+      aliases: backupAliases,
     });
   });
 
@@ -383,6 +644,44 @@ describe('import', () => {
       expect(alerts).toContain('Not a valid xNotes backup file');
     });
     expect(Object.keys((await getStore()).notes)).toEqual(['jack']);
+  });
+
+  it('preserves the formerly hint across export into a fresh install', async () => {
+    await saveStore(storeWith([{ ...makeNote('oldhandle', 'moved', 'teal', 100), userId: '123' }]));
+    await saveAliases(recordObservation(emptyAliases(), 'oldhandle', '123', 100));
+    await renameNote('oldhandle', 'newhandle', 'moved', 'teal');
+    const store = await getStore();
+    const aliases = (await getAliases()).aliases;
+    const { json } = buildExport(store, aliases);
+    fakeBrowser.reset();
+    stubConfirm([true]);
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountManager(root);
+    await importFile(root, json);
+    await vi.waitFor(() => {
+      expect(rowWith(root, '@newhandle').textContent).toContain('formerly @oldhandle');
+    });
+    expect((await getStore()).tombstones['oldhandle']).toBe(store.tombstones['oldhandle']);
+    expect((await getAliases()).aliases).toEqual(aliases);
+  });
+
+  it('imports old backups without aliases and merges bindings by newer observation', async () => {
+    stubConfirm([true, true]);
+    await saveAliases(recordObservation(emptyAliases(), 'jack', '111', 500));
+    const root = await mount([makeNote('jack', 'local', null, 100)]);
+    await importFile(root, JSON.stringify(backup));
+    await vi.waitFor(async () => {
+      expect((await getStore()).notes['alice']).toBeDefined();
+    });
+    expect((await getAliases()).aliases).toEqual({ jack: { userId: '111', observedAt: 500 } });
+    await importFile(root, buildExport(backup, backupAliases).json);
+    await vi.waitFor(async () => {
+      expect((await getAliases()).aliases).toEqual({
+        jack: { userId: '111', observedAt: 500 },
+        oldhandle: { userId: '123', observedAt: 100 },
+      });
+    });
   });
 });
 
@@ -480,5 +779,46 @@ describe('formerly-known-handle display', () => {
     const root = await mountWithStore(store);
     expect(rowWith(root, '@newhandle').textContent).toContain('formerly @oldhandle');
     expect(rowWith(root, '@direct').textContent).not.toContain('formerly @');
+  });
+
+  it('renders the table hint as a block below the handle link', async () => {
+    const store = storeWith([{ ...makeNote('newhandle', 'moved', 'teal', 400), userId: '123' }]);
+    store.tombstones['oldhandle'] = 350;
+    await saveAliases(
+      recordObservation(
+        recordObservation(emptyAliases(), 'oldhandle', '123', 100),
+        'newhandle',
+        '123',
+        350,
+      ),
+    );
+    const root = await mountWithStore(store);
+    const marker = rowWith(root, '@newhandle').querySelector('.note-formerly-block');
+    expect(marker).not.toBeNull();
+    expect(marker?.tagName).toBe('DIV');
+    expect(marker?.textContent).toBe('formerly @oldhandle');
+    expect(marker?.previousElementSibling?.classList.contains('handle-link')).toBe(true);
+  });
+
+  it('renders the card hint as a spaced inline element', async () => {
+    const store = storeWith([{ ...makeNote('newhandle', 'moved', 'teal', 400), userId: '123' }]);
+    store.tombstones['oldhandle'] = 350;
+    await saveAliases(
+      recordObservation(
+        recordObservation(emptyAliases(), 'oldhandle', '123', 100),
+        'newhandle',
+        '123',
+        350,
+      ),
+    );
+    const root = await mountWithStore(store);
+    button(root, 'Cards').click();
+    await vi.waitFor(() => {
+      expect(root.querySelectorAll('.note-card')).toHaveLength(1);
+    });
+    const marker = root.querySelector('.note-card .note-formerly');
+    expect(marker).not.toBeNull();
+    expect(marker?.tagName).toBe('SPAN');
+    expect(marker?.textContent).toBe('formerly @oldhandle');
   });
 });

@@ -170,4 +170,203 @@ describe('mountSettings', () => {
     const s3Error = s3Fields.querySelectorAll<HTMLElement>('.field-error')[0];
     expect(s3Error?.textContent).toBe('');
   });
+
+  it('shows only the s3 section on initial render from a saved s3 backend', async () => {
+    await saveSettings({
+      backend: {
+        backend: 's3',
+        endpoint: 'https://s3.example.com',
+        region: 'us-east-1',
+        bucket: 'my-bucket',
+        prefix: 'xnotes/',
+        accessKey: 'ak',
+        secretKey: 'sk',
+        pathStyle: true,
+        forceHeadFallback: false,
+      },
+      syncIntervalMinutes: 5,
+      encryptionEnabled: false,
+    });
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountSettings(root);
+    await vi.waitFor(() => {
+      expect(root.querySelector<HTMLSelectElement>('.backend-select')?.value).toBe('s3');
+    });
+    const fieldsets = root.querySelectorAll<HTMLFieldSetElement>('fieldset.backend-fields');
+    expect(fieldsets[0]?.hidden).toBe(true);
+    expect(fieldsets[1]?.hidden).toBe(false);
+  });
+
+  it('hides both backend sections on initial render with no saved backend', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountSettings(root);
+    await vi.waitFor(() => {
+      expect(root.querySelector<HTMLInputElement>('.sync-interval')?.disabled).toBe(false);
+    });
+    expect(root.querySelector<HTMLSelectElement>('.backend-select')?.value).toBe('none');
+    const fieldsets = root.querySelectorAll<HTMLFieldSetElement>('fieldset.backend-fields');
+    expect(fieldsets[0]?.hidden).toBe(true);
+    expect(fieldsets[1]?.hidden).toBe(true);
+  });
+
+  it('switching backends hides sections without wiping unsaved field values', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountSettings(root);
+    await vi.waitFor(() => {
+      expect(root.querySelector<HTMLInputElement>('.sync-interval')?.disabled).toBe(false);
+    });
+    const select = root.querySelector<HTMLSelectElement>('.backend-select');
+    const fieldsets = root.querySelectorAll<HTMLFieldSetElement>('fieldset.backend-fields');
+    const webdavFields = fieldsets[0];
+    const s3Fields = fieldsets[1];
+    if (select === null || webdavFields === undefined || s3Fields === undefined) return;
+    const webdavInputs = webdavFields.querySelectorAll<HTMLInputElement>('input');
+    const s3Inputs = s3Fields.querySelectorAll<HTMLInputElement>('input');
+    select.value = 's3';
+    select.dispatchEvent(new Event('change'));
+    expect(webdavFields.hidden).toBe(true);
+    expect(s3Fields.hidden).toBe(false);
+    s3Inputs[0]!.value = 'https://s3.example.com';
+    select.value = 'webdav';
+    select.dispatchEvent(new Event('change'));
+    expect(webdavFields.hidden).toBe(false);
+    expect(s3Fields.hidden).toBe(true);
+    webdavInputs[0]!.value = 'https://dav.example.com';
+    select.value = 's3';
+    select.dispatchEvent(new Event('change'));
+    expect(s3Inputs[0]!.value).toBe('https://s3.example.com');
+    select.value = 'webdav';
+    select.dispatchEvent(new Event('change'));
+    expect(webdavInputs[0]!.value).toBe('https://dav.example.com');
+    select.value = 'none';
+    select.dispatchEvent(new Event('change'));
+    expect(webdavFields.hidden).toBe(true);
+    expect(s3Fields.hidden).toBe(true);
+  });
+
+  it('hides sync-only controls with backend none, keeping dropdown and save visible', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountSettings(root);
+    await vi.waitFor(() => {
+      expect(root.querySelector<HTMLInputElement>('.sync-interval')?.disabled).toBe(false);
+    });
+    expect(root.querySelector<HTMLSelectElement>('.backend-select')?.value).toBe('none');
+    expect(root.querySelector<HTMLElement>('.sync-only')?.hidden).toBe(true);
+    expect(
+      root.querySelector<HTMLInputElement>('.sync-interval')?.closest('.sync-only'),
+    ).not.toBeNull();
+    expect(
+      root.querySelector<HTMLInputElement>('.encryption-toggle')?.closest('.sync-only'),
+    ).not.toBeNull();
+    expect(
+      root.querySelector<HTMLInputElement>('.passphrase-input')?.closest('.sync-only'),
+    ).not.toBeNull();
+    expect(
+      root.querySelector<HTMLElement>('.passphrase-note')?.closest('.sync-only'),
+    ).not.toBeNull();
+    const testBtn = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (b) => b.textContent === 'Test connection',
+    );
+    expect(testBtn?.closest('.sync-only')).not.toBeNull();
+    expect(root.querySelector<HTMLSelectElement>('.backend-select')?.hidden).toBe(false);
+    const saveBtn = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
+      (b) => b.textContent === 'Save',
+    );
+    expect(saveBtn?.hidden).toBe(false);
+  });
+
+  it('shows sync-only controls for webdav and s3 selections', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountSettings(root);
+    await vi.waitFor(() => {
+      expect(root.querySelector<HTMLInputElement>('.sync-interval')?.disabled).toBe(false);
+    });
+    const select = root.querySelector<HTMLSelectElement>('.backend-select');
+    if (select === null) return;
+    select.value = 'webdav';
+    select.dispatchEvent(new Event('change'));
+    expect(root.querySelector<HTMLElement>('.sync-only')?.hidden).toBe(false);
+    select.value = 's3';
+    select.dispatchEvent(new Event('change'));
+    expect(root.querySelector<HTMLElement>('.sync-only')?.hidden).toBe(false);
+    select.value = 'none';
+    select.dispatchEvent(new Event('change'));
+    expect(root.querySelector<HTMLElement>('.sync-only')?.hidden).toBe(true);
+  });
+
+  it('switching none to s3 and back preserves unsaved sync-only values', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountSettings(root);
+    await vi.waitFor(() => {
+      expect(root.querySelector<HTMLInputElement>('.sync-interval')?.disabled).toBe(false);
+    });
+    const select = root.querySelector<HTMLSelectElement>('.backend-select');
+    const interval = root.querySelector<HTMLInputElement>('.sync-interval');
+    const toggle = root.querySelector<HTMLInputElement>('.encryption-toggle');
+    const passphrase = root.querySelector<HTMLInputElement>('.passphrase-input');
+    if (select === null || interval === null || toggle === null || passphrase === null) return;
+    select.value = 's3';
+    select.dispatchEvent(new Event('change'));
+    interval.value = '15';
+    toggle.checked = true;
+    passphrase.value = 'unsaved-secret';
+    select.value = 'none';
+    select.dispatchEvent(new Event('change'));
+    expect(root.querySelector<HTMLElement>('.sync-only')?.hidden).toBe(true);
+    select.value = 's3';
+    select.dispatchEvent(new Event('change'));
+    expect(root.querySelector<HTMLElement>('.sync-only')?.hidden).toBe(false);
+    expect(interval.value).toBe('15');
+    expect(toggle.checked).toBe(true);
+    expect(passphrase.value).toBe('unsaved-secret');
+    select.value = 'none';
+    select.dispatchEvent(new Event('change'));
+    expect(interval.value).toBe('15');
+    expect(passphrase.value).toBe('unsaved-secret');
+  });
+
+  it('shows helper text for key prefix and path-style urls, and aligns checkbox rows', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountSettings(root);
+    await vi.waitFor(() => {
+      expect(root.querySelector<HTMLInputElement>('.sync-interval')?.disabled).toBe(false);
+    });
+    const hints = [...root.querySelectorAll<HTMLElement>('.field-hint')];
+    expect(hints).toHaveLength(2);
+    expect(hints[0]?.textContent).toContain('leave empty');
+    expect(hints[1]?.textContent).toContain('https://endpoint/bucket/key');
+    expect(hints[1]?.textContent).toContain('https://bucket.endpoint/key');
+    const checkboxLabels = root.querySelectorAll<HTMLElement>('label.field-checkbox');
+    expect(checkboxLabels.length).toBe(3);
+    expect(hints[1]?.closest('label.field-checkbox')).not.toBeNull();
+  });
+
+  it('renders the author footer with the three correct links', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountSettings(root);
+    await vi.waitFor(() => {
+      expect(root.querySelector('footer.settings-footer')).not.toBeNull();
+    });
+    const footer = root.querySelector<HTMLElement>('footer.settings-footer');
+    if (footer === null) return;
+    expect(footer.textContent).toContain('Arda Kılıçdağı');
+    const links = [...footer.querySelectorAll<HTMLAnchorElement>('a')];
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      'https://arda.pw',
+      'https://x.com/ardadev',
+      'https://github.com/Ardakilic/xnotes',
+    ]);
+    for (const link of links) {
+      expect(link.target).toBe('_blank');
+      expect(link.rel).toContain('noopener');
+    }
+  });
 });

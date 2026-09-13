@@ -61,18 +61,6 @@ export function createPanel(handle: string, hooks: PanelHooks, options?: PanelOp
     for (const key of COLOR_KEYS) root.classList.remove(`xn-accent-${key}`);
   }
 
-  function managerLink(): HTMLAnchorElement {
-    const link = document.createElement('a');
-    link.className = 'xn-manager';
-    link.href = '#';
-    link.textContent = 'All notes';
-    link.addEventListener('click', (event) => {
-      event.preventDefault();
-      hooks.openManager();
-    });
-    return link;
-  }
-
   function button(label: string, className: string, onClick: () => void): HTMLButtonElement {
     const el = document.createElement('button');
     el.type = 'button';
@@ -80,6 +68,10 @@ export function createPanel(handle: string, hooks: PanelHooks, options?: PanelOp
     el.textContent = label;
     el.addEventListener('click', onClick);
     return el;
+  }
+
+  function managerButton(): HTMLButtonElement {
+    return button('All notes', 'xn-manager', () => hooks.openManager());
   }
 
   function setMutationControlsEnabled(enabled: boolean): void {
@@ -102,10 +94,13 @@ export function createPanel(handle: string, hooks: PanelHooks, options?: PanelOp
   function renderEmpty(): void {
     mode = 'empty';
     clearAccent();
-    body.replaceChildren(
+    const actions = document.createElement('div');
+    actions.className = 'xn-actions';
+    actions.append(
       button('Add note', 'xn-add', () => renderEdit(null)),
-      managerLink(),
+      managerButton(),
     );
+    body.replaceChildren(actions);
   }
 
   /** Render view mode, prepending the formerly-known-handle hint when set. */
@@ -120,7 +115,7 @@ export function createPanel(handle: string, hooks: PanelHooks, options?: PanelOp
     actions.className = 'xn-actions';
     actions.append(
       button('Edit', 'xn-edit', () => renderEdit(note)),
-      managerLink(),
+      managerButton(),
     );
     if (formerHandle === null) {
       body.replaceChildren(text, actions);

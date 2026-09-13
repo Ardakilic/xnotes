@@ -1,17 +1,25 @@
 import { COLOR_KEYS, COLOR_LABELS } from '../../src/core/colors';
 import type { ColorKey } from '../../src/core/colors';
-import { emptyAliases, getAlias, lookupByUserId, type AliasStore } from '../../src/core/aliases';
+import {
+  emptyAliases,
+  getAlias,
+  lookupByUserId,
+  mergeAliases,
+  type AliasStore,
+} from '../../src/core/aliases';
 import { filterNotes } from '../../src/core/filters';
 import type { ColorFilter } from '../../src/core/filters';
 import { formatTimestamp } from '../../src/core/format';
-import { exportStoreJson, parseImportFile } from '../../src/core/import-export';
+import { exportStoreJson, parseImportFile, type ParsedImport } from '../../src/core/import-export';
 import {
   deleteNote,
   getAliases,
   getStore,
   getView,
   reassignNote,
+  renameNote,
   type ReassignResult,
+  saveAliases,
   saveStore,
   saveView,
   subscribeToStoreChanges,
@@ -25,16 +33,22 @@ export type ImportChoice = 'merge' | 'replace' | 'abort';
 export type ImportAction =
   | { kind: 'invalid' }
   | { kind: 'abort' }
-  | { kind: 'apply'; mode: 'merge' | 'replace'; store: StoreV2 };
+  | { kind: 'apply'; mode: 'merge' | 'replace'; store: StoreV2; aliases: AliasStore };
 
-export function chooseImportAction(parsed: StoreV2 | null, choice: ImportChoice): ImportAction {
+export function chooseImportAction(
+  parsed: ParsedImport | null,
+  choice: ImportChoice,
+): ImportAction {
   if (parsed === null) return { kind: 'invalid' };
   if (choice === 'abort') return { kind: 'abort' };
-  return { kind: 'apply', mode: choice, store: parsed };
+  return { kind: 'apply', mode: choice, store: parsed.store, aliases: parsed.aliases };
 }
 
-export function buildExport(store: StoreV2): { filename: string; json: string } {
-  return exportStoreJson(store);
+export function buildExport(
+  store: StoreV2,
+  aliases: AliasStore,
+): { filename: string; json: string } {
+  return exportStoreJson(store, aliases);
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -110,7 +124,7 @@ export function mountManager(root: HTMLElement): void {
   const countLine = el('p', 'manager-count');
   const search = el('input', 'manager-search');
   search.type = 'search';
-  search.placeholder = 'Search by profile or note text';
+  search.placeholder = 'Search by profile, note text, or user ID';
   const chipBar = el('div', 'chip-bar');
   const tableBtn = el('button', 'view-btn', 'Table');
   const cardsBtn = el('button', 'view-btn', 'Cards');
@@ -250,9 +264,17 @@ export function mountManager(root: HTMLElement): void {
   }
 
   /** Formerly-known-handle marker for a row, or `null` when direct. */
-  function formerMarker(note: NoteRecord, store: StoreV2, aliases: AliasStore): HTMLElement | null {
+  function formerMarker(
+    note: NoteRecord,
+    store: StoreV2,
+    aliases: AliasStore,
+    block: boolean,
+  ): HTMLElement | null {
     const former = formerHandleFor(note, aliases, store.tombstones);
-    return former === null ? null : el('span', 'former-handle', `formerly @${former}`);
+    if (former === null) return null;
+    return block
+      ? el('div', 'note-formerly-block', `formerly @${former}`)
+      : el('span', 'note-formerly', `formerly @${former}`);
   }
 
   function editSlot(note: NoteRecord): HTMLElement | null {
@@ -264,7 +286,7 @@ export function mountManager(root: HTMLElement): void {
   function renderTable(notes: NoteRecord[], store: StoreV2, aliases: AliasStore): void {
     const table = el('table', 'notes-table');
     const headRow = el('tr');
-    for (const label of ['Profile', 'Note', 'Color', 'Updated', ''])
+    for (const label of ['Profile', 'Note', 'Color', 'User ID', 'Updated', ''])
       headRow.append(el('th', undefined, label));
     const thead = el('thead');
     thead.append(headRow);
@@ -273,7 +295,7 @@ export function mountManager(root: HTMLElement): void {
       const form = editSlot(note);
       if (form !== null) {
         const td = el('td');
-        td.colSpan = 5;
+        td.colSpan = 6;
         td.append(form);
         const tr = el('tr', 'edit-row');
         tr.append(td);
@@ -283,15 +305,16 @@ export function mountManager(root: HTMLElement): void {
       const tr = el('tr', 'note-row');
       const handleTd = el('td');
       handleTd.append(profileLink(note.handle));
-      const marker = formerMarker(note, store, aliases);
+      const marker = formerMarker(note, store, aliases, true);
       if (marker !== null) handleTd.append(marker);
       const textTd = el('td', 'note-text', note.text);
       const colorTd = el('td');
       colorTd.append(colorChip(note.color, true));
+      const userTd = el('td', 'note-userid', note.userId ?? '—');
       const updatedTd = el('td', 'note-updated', formatTimestamp(note.updatedAt));
       const actionsTd = el('td', 'note-actions');
       actionsTd.append(buildEditButton(note), buildDeleteButton(note));
-      tr.append(handleTd, textTd, colorTd, updatedTd, actionsTd);
+      tr.append(handleTd, textTd, colorTd, userTd, updatedTd, actionsTd);
       tbody.append(tr);
     }
     table.append(thead, tbody);
@@ -313,9 +336,14 @@ export function mountManager(root: HTMLElement): void {
         profileLink(note.handle),
         el('span', 'note-updated', formatTimestamp(note.updatedAt)),
       );
-      const cardMarker = formerMarker(note, store, aliases);
+      const cardMarker = formerMarker(note, store, aliases, false);
       if (cardMarker !== null) head.append(cardMarker);
-      card.append(head, el('p', 'note-text', note.text), colorChip(note.color, true));
+      card.append(
+        head,
+        el('p', 'note-text', note.text),
+        colorChip(note.color, true),
+        el('span', 'note-userid', `ID ${note.userId ?? '—'}`),
+      );
       const actions = el('div', 'note-actions');
       actions.append(buildEditButton(note), buildDeleteButton(note));
       card.append(actions);
@@ -351,8 +379,15 @@ export function mountManager(root: HTMLElement): void {
 
   function startEdit(note: NoteRecord): void {
     const form = el('div', 'edit-form');
+    const handleInput = el('input', 'edit-handle');
+    handleInput.type = 'text';
+    handleInput.value = note.handle;
     const textarea = el('textarea', 'edit-text');
     textarea.value = note.text;
+    const useridInput = el('input', 'edit-userid');
+    useridInput.type = 'text';
+    useridInput.placeholder = 'User ID (digits only)';
+    useridInput.value = note.userId ?? '';
     let selected: ColorKey | null = note.color;
     const swatches = el('div', 'swatches');
     const options: (ColorKey | null)[] = [...COLOR_KEYS, null];
@@ -371,14 +406,61 @@ export function mountManager(root: HTMLElement): void {
     const saveBtn = el('button', undefined, 'Save');
     saveBtn.type = 'button';
     saveBtn.addEventListener('click', () => {
-      void upsertNote(note.handle, textarea.value, selected)
-        .then(() => {
-          editing = null;
-          void refresh();
-        })
-        .catch(() => {
+      const rawHandle = handleInput.value.trim().replace(/^@/, '').trim();
+      if (!/^[A-Za-z0-9_]{1,15}$/.test(rawHandle)) {
+        alert('That handle is not valid.');
+        return;
+      }
+      const rawId = useridInput.value.trim();
+      if (rawId !== '' && !/^\d+$/.test(rawId)) {
+        alert('That user ID is not valid.');
+        return;
+      }
+      void (async () => {
+        const store = await getStore();
+        const targetLower = rawHandle.toLowerCase();
+        if (targetLower !== note.handleLower && store.notes[targetLower] !== undefined) {
+          alert('That handle already has a note.');
+          return;
+        }
+        if (
+          targetLower === note.handleLower &&
+          rawId !== '' &&
+          Object.values(store.notes).some(
+            (other) => other.handleLower !== note.handleLower && other.userId === rawId,
+          )
+        ) {
+          alert('That user ID is already used by another note.');
+          return;
+        }
+        try {
+          if (targetLower === note.handleLower) {
+            await upsertNote(rawHandle, textarea.value, selected, undefined, rawId);
+          } else {
+            const result = await renameNote(
+              note.handle,
+              rawHandle,
+              textarea.value,
+              selected,
+              undefined,
+            );
+            if (result === 'target-occupied') {
+              alert('That handle already has a note.');
+              return;
+            }
+            if (result === 'nothing-to-move') {
+              editing = null;
+              await refresh();
+              return;
+            }
+          }
+        } catch {
           alert('Could not save — the note was not written. Please try again.');
-        });
+          return;
+        }
+        editing = null;
+        await refresh();
+      })();
     });
     const cancelBtn = el('button', undefined, 'Cancel');
     cancelBtn.type = 'button';
@@ -386,7 +468,7 @@ export function mountManager(root: HTMLElement): void {
       editing = null;
       void refresh();
     });
-    form.append(textarea, swatches, saveBtn, cancelBtn);
+    form.append(handleInput, textarea, useridInput, swatches, saveBtn, cancelBtn);
     editing = { handleLower: note.handleLower, el: form };
     void refresh();
   }
@@ -438,7 +520,9 @@ export function mountManager(root: HTMLElement): void {
   }
 
   async function doExport(): Promise<void> {
-    const { filename, json } = buildExport(await getStore());
+    const store = await getStore();
+    const aliasRead = await getAliases();
+    const { filename, json } = buildExport(store, aliasRead.aliases);
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
     const link = el('a');
     link.href = url;
@@ -461,8 +545,16 @@ export function mountManager(root: HTMLElement): void {
     }
     if (action.kind === 'abort') return;
     try {
-      if (action.mode === 'merge') await saveStore(merge(await getStore(), action.store));
-      else await saveStore(action.store);
+      if (action.mode === 'merge') {
+        await saveStore(merge(await getStore(), action.store));
+        const current = await getAliases();
+        await saveAliases(
+          current.ok ? mergeAliases(current.aliases, action.aliases) : action.aliases,
+        );
+      } else {
+        await saveStore(action.store);
+        await saveAliases(action.aliases);
+      }
     } catch {
       alert('Could not import — the store was not written. Please try again.');
       return;
