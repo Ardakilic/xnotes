@@ -500,3 +500,7 @@ export async function getAliases(): Promise<AliasReadResult> {
 export async function saveAliases(store: AliasStore): Promise<void> {
   await safeWrite(ALIASES_KEY, store);
 }
+
+export async function saveAliasesStrict(store: AliasStore): Promise<void> {
+  await strictWrite(ALIASES_KEY, store);
+}

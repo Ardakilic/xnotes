@@ -127,7 +127,14 @@ const HOVER_STYLE = `
 export function injectHoverCardNote(doc: Document, notes: Record<string, NoteRecord>): void {
   const cards = doc.querySelectorAll('[data-testid="HoverCard"]');
   cards.forEach((card) => {
-    if (card.querySelector('div[data-xn-hover]') !== null) return;
+    const existing = card.querySelector('div[data-xn-hover]');
+    if (existing !== null) {
+      const note = findNotedLink(card, doc, notes);
+      if (note === null) return;
+      for (const key of COLOR_KEYS) existing.classList.remove(`xn-accent-${key}`);
+      if (note.color !== null) existing.classList.add(`xn-accent-${note.color}`);
+      return;
+    }
     const note = findNotedLink(card, doc, notes);
     if (note === null) return;
     const host = doc.createElement('div');

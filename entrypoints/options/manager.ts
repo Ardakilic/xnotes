@@ -19,7 +19,7 @@ import {
   reassignNote,
   renameNote,
   type ReassignResult,
-  saveAliases,
+  saveAliasesStrict,
   saveStore,
   saveView,
   subscribeToStoreChanges,
@@ -424,7 +424,6 @@ export function mountManager(root: HTMLElement): void {
           return;
         }
         if (
-          targetLower === note.handleLower &&
           rawId !== '' &&
           Object.values(store.notes).some(
             (other) => other.handleLower !== note.handleLower && other.userId === rawId,
@@ -452,6 +451,9 @@ export function mountManager(root: HTMLElement): void {
               editing = null;
               await refresh();
               return;
+            }
+            if (rawId !== (note.userId ?? '') && textarea.value.trim() !== '') {
+              await upsertNote(rawHandle, textarea.value, selected, undefined, rawId);
             }
           }
         } catch {
@@ -522,6 +524,10 @@ export function mountManager(root: HTMLElement): void {
   async function doExport(): Promise<void> {
     const store = await getStore();
     const aliasRead = await getAliases();
+    if (!aliasRead.ok) {
+      alert('Could not export — aliases could not be read. Export aborted.');
+      return;
+    }
     const { filename, json } = buildExport(store, aliasRead.aliases);
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
     const link = el('a');
@@ -545,18 +551,25 @@ export function mountManager(root: HTMLElement): void {
     }
     if (action.kind === 'abort') return;
     try {
+      if (action.mode === 'merge') await saveStore(merge(await getStore(), action.store));
+      else await saveStore(action.store);
+    } catch {
+      alert('Could not import — the store was not written. Please try again.');
+      return;
+    }
+    try {
       if (action.mode === 'merge') {
-        await saveStore(merge(await getStore(), action.store));
         const current = await getAliases();
-        await saveAliases(
+        await saveAliasesStrict(
           current.ok ? mergeAliases(current.aliases, action.aliases) : action.aliases,
         );
       } else {
-        await saveStore(action.store);
-        await saveAliases(action.aliases);
+        await saveAliasesStrict(action.aliases);
       }
     } catch {
-      alert('Could not import — the store was not written. Please try again.');
+      alert(
+        'Import incomplete — aliases were not saved, but the store may already have been written.',
+      );
       return;
     }
     await refresh();

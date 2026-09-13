@@ -154,6 +154,17 @@ describe('injectHoverCardNote', () => {
     expect(hosts.length).toBe(1);
     expect(hosts.item(0)?.classList.contains('xn-accent-red')).toBe(true);
   });
+
+  it('refreshes the accent class when the note color changes', () => {
+    document.body.innerHTML =
+      '<div data-testid="HoverCard"><a href="https://x.com/jack">Jack</a></div>';
+    injectHoverCardNote(document, { jack: makeNote('jack', 'red') });
+    injectHoverCardNote(document, { jack: makeNote('jack', 'blue') });
+    const hosts = document.querySelectorAll('div[data-xn-hover]');
+    expect(hosts.length).toBe(1);
+    expect(hosts.item(0)?.classList.contains('xn-accent-blue')).toBe(true);
+    expect(hosts.item(0)?.classList.contains('xn-accent-red')).toBe(false);
+  });
 });
 
 describe('notes carrying userId', () => {

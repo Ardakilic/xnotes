@@ -28,6 +28,7 @@ import './style.css';
 const ANCHOR_SELECTOR = '[data-testid="primaryColumn"] [data-testid="UserName"]';
 const ANCHOR_POLL_MS = 250;
 const ANCHOR_TIMEOUT_MS = 4000;
+const RETRY_TIMEOUT_MS = 2000;
 const TICK_MS = 2000;
 
 /**
@@ -191,6 +192,20 @@ export async function retryLearnWhenUnknown(
   token?: { stale(): boolean },
 ): Promise<LearnOutcome | null> {
   if (first.observedId !== null) return null;
+  if (token !== undefined && token.stale()) return null;
+  const deadline = Date.now() + RETRY_TIMEOUT_MS;
+  for (;;) {
+    let seen: string | null;
+    try {
+      seen = learnUserId(doc, handle);
+    } catch {
+      seen = null;
+    }
+    if (seen !== null) break;
+    if (Date.now() >= deadline) break;
+    if (token !== undefined && token.stale()) return null;
+    await sleep(ANCHOR_POLL_MS);
+  }
   if (token !== undefined && token.stale()) return null;
   let second: LearnOutcome;
   try {

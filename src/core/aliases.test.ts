@@ -127,6 +127,15 @@ describe('mergeAliases', () => {
     });
   });
 
+  it('keeps the local binding on equal timestamps', () => {
+    const local = recordObservation(emptyAliases(), 'jack', '111', 100);
+    const imported = recordObservation(emptyAliases(), 'jack', '222', 100);
+    expect(getAlias(mergeAliases(local, imported), 'jack')).toEqual({
+      userId: '111',
+      observedAt: 100,
+    });
+  });
+
   it('leaves the local store untouched', () => {
     const local = recordObservation(emptyAliases(), 'jack', '111', 100);
     const imported = recordObservation(emptyAliases(), 'jill', '222', 200);

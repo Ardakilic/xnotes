@@ -620,6 +620,78 @@ describe('visit-time race retry', () => {
     expect(store.tombstones['theo88']).toBeDefined();
   });
 
+  it('retry waits for identity data that arrives after the first pass', async () => {
+    await saveStore({
+      schemaVersion: 2,
+      notes: {
+        theo88: {
+          handle: 'theo88',
+          handleLower: 'theo88',
+          text: 'theo note',
+          color: null,
+          createdAt: 100,
+          updatedAt: 200,
+          userId: '786',
+        },
+      },
+      tombstones: {},
+    });
+    await saveAliases(emptyAliases());
+    document.body.innerHTML = '';
+
+    const first = await learnIdentityForProfile('theo', document);
+
+    expect(first).toEqual({ observedId: null, renamedFrom: null, withheld: false });
+    window.setTimeout(() => {
+      setJsonLd('{"mainEntity":{"identifier":"786","alternateName":"theo"}}');
+    }, 100);
+    const second = await retryLearnWhenUnknown('theo', document, first);
+
+    expect(second?.observedId).toBe('786');
+    expect(second?.renamedFrom).toBe('theo88');
+    const store = await getStore();
+    expect(store.notes['theo']?.text).toBe('theo note');
+    expect(store.notes['theo88']).toBeUndefined();
+    expect(store.tombstones['theo88']).toBeDefined();
+  });
+
+  it('retry aborts the wait without writing when the token goes stale', async () => {
+    await saveStore({
+      schemaVersion: 2,
+      notes: {
+        theo88: {
+          handle: 'theo88',
+          handleLower: 'theo88',
+          text: 'theo note',
+          color: null,
+          createdAt: 100,
+          updatedAt: 200,
+          userId: '786',
+        },
+      },
+      tombstones: {},
+    });
+    await saveAliases(emptyAliases());
+    document.body.innerHTML = '';
+
+    const first = await learnIdentityForProfile('theo', document);
+
+    expect(first).toEqual({ observedId: null, renamedFrom: null, withheld: false });
+    let stale = false;
+    window.setTimeout(() => {
+      stale = true;
+    }, 100);
+    const second = await retryLearnWhenUnknown('theo', document, first, {
+      stale: () => stale,
+    });
+
+    expect(second).toBeNull();
+    const store = await getStore();
+    expect(store.notes['theo']).toBeUndefined();
+    expect(store.notes['theo88']?.text).toBe('theo note');
+    expect((await getAliases()).aliases['theo']).toBeUndefined();
+  });
+
   it('retry skips when first already observed and respects stale token', async () => {
     await saveStore({
       schemaVersion: 2,

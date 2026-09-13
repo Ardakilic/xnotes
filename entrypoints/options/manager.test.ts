@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emptyAliases, recordObservation } from '../../src/core/aliases';
 import { parseImportFile } from '../../src/core/import-export';
 import {
+  ALIASES_KEY,
   getAliases,
   getStore,
   renameNote,
@@ -469,6 +470,49 @@ describe('handle edit', () => {
     expect(root.querySelector('textarea.edit-text')).not.toBeNull();
   });
 
+  it('persists an edited user ID through a rename', async () => {
+    const root = await mount([
+      { ...makeNote('jack', 'hello', null, 100), userId: '111' },
+      { ...makeNote('alice', 'world', null, 200), userId: '222' },
+    ]);
+    await openRowEdit(root, '@jack');
+    handleInput(root).value = 'john';
+    const userid = root.querySelector<HTMLInputElement>('input.edit-userid');
+    if (userid === null) throw new Error('user ID input not found');
+    userid.value = '999';
+    button(root, 'Save').click();
+    await vi.waitFor(async () => {
+      expect((await getStore()).notes['john']?.userId).toBe('999');
+    });
+    const store = await getStore();
+    expect(store.notes['jack']).toBeUndefined();
+    expect(store.tombstones['jack']).toBeDefined();
+    expect(store.notes['john']).toMatchObject({ handle: 'john', text: 'hello' });
+  });
+
+  it('refuses a duplicate user ID on rename without writing', async () => {
+    const alerts = stubAlert();
+    const root = await mount([
+      { ...makeNote('jack', 'hello', null, 100), userId: '111' },
+      { ...makeNote('alice', 'world', null, 200), userId: '222' },
+    ]);
+    await openRowEdit(root, '@jack');
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set');
+    handleInput(root).value = 'john';
+    const userid = root.querySelector<HTMLInputElement>('input.edit-userid');
+    if (userid === null) throw new Error('user ID input not found');
+    userid.value = '222';
+    button(root, 'Save').click();
+    await vi.waitFor(() => {
+      expect(alerts.some((m) => m.includes('already used'))).toBe(true);
+    });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['jack']?.userId).toBe('111');
+    expect(store.notes['john']).toBeUndefined();
+  });
+
   it('saves when handle and user ID are unchanged (self excluded)', async () => {
     const root = await mount([{ ...makeNote('jack', 'hello', null, 100), userId: '123' }]);
     await openRowEdit(root, '@jack');
@@ -545,6 +589,24 @@ describe('export', () => {
     expect(parseImportFile(json)?.aliases).toEqual({
       oldhandle: { userId: '123', observedAt: 100 },
     });
+  });
+
+  it('aborts with an alert when aliases cannot be read instead of exporting empty aliases', async () => {
+    const alerts = stubAlert();
+    const root = await mount([makeNote('jack', 'hello', null, 100)]);
+    const clickSpy = vi
+      .spyOn(window.HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {});
+    const getSpy = vi
+      .spyOn(fakeBrowser.storage.local, 'get')
+      .mockRejectedValue(new Error('read failed'));
+    button(root, 'Export JSON').click();
+    await vi.waitFor(() => {
+      expect(alerts.some((m) => m.includes('Could not export'))).toBe(true);
+    });
+    expect(clickSpy).not.toHaveBeenCalled();
+    getSpy.mockRestore();
+    clickSpy.mockRestore();
   });
 });
 
@@ -625,6 +687,25 @@ describe('import', () => {
     });
     spy.mockRestore();
     expect(Object.keys((await getStore()).notes)).toEqual(['jack']);
+  });
+
+  it('reports an incomplete import when the alias write fails after the store write', async () => {
+    stubConfirm([true]);
+    const alerts = stubAlert();
+    const root = await mount([makeNote('jack', 'local', null, 100)]);
+    const originalSet = fakeBrowser.storage.local.set.bind(fakeBrowser.storage.local);
+    const spy = vi.spyOn(fakeBrowser.storage.local, 'set').mockImplementation((items) => {
+      if (ALIASES_KEY in items) throw new Error('QUOTA_BYTES quota exceeded');
+      return originalSet(items);
+    });
+    await importFile(root, buildExport(backup, backupAliases).json);
+    await vi.waitFor(() => {
+      expect(alerts.some((m) => m.includes('may already have been written'))).toBe(true);
+    });
+    spy.mockRestore();
+    const store = await getStore();
+    expect(store.notes['jack']).toBeDefined();
+    expect(store.notes['alice']?.text).toBe('from backup');
   });
 
   it('aborts when both confirms are declined', async () => {

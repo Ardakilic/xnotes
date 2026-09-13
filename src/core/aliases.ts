@@ -99,7 +99,7 @@ export function mergeAliases(local: AliasStore, imported: AliasStore): AliasStor
   Object.assign(next, local);
   for (const [key, entry] of Object.entries(imported)) {
     const current = next[key];
-    if (current === undefined || entry.observedAt >= current.observedAt) {
+    if (current === undefined || entry.observedAt > current.observedAt) {
       next[key] = { userId: entry.userId, observedAt: entry.observedAt };
     }
   }
