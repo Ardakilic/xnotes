@@ -93,3 +93,15 @@ export function recordObservation(
   next[normalized] = { userId, observedAt: now ?? Date.now() };
   return next;
 }
+
+export function mergeAliases(local: AliasStore, imported: AliasStore): AliasStore {
+  const next: AliasStore = Object.create(null);
+  Object.assign(next, local);
+  for (const [key, entry] of Object.entries(imported)) {
+    const current = next[key];
+    if (current === undefined || entry.observedAt > current.observedAt) {
+      next[key] = { userId: entry.userId, observedAt: entry.observedAt };
+    }
+  }
+  return next;
+}

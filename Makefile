@@ -17,7 +17,9 @@ else
   PREPARE := true
 endif
 
-DOCKER = docker run --rm $(USER_FLAGS) $(CACHE_FLAGS) $(PORT_FLAGS) -v "$(PWD)":/app -w /app $(NODE_IMAGE)
+# ponytail: -i keeps STDIN open — Vite's dev server exits on stdin 'end' and
+# docker closes stdin without it, so `make dev` would build once and stop
+DOCKER = docker run --rm -i $(USER_FLAGS) $(CACHE_FLAGS) $(PORT_FLAGS) -v "$(PWD)":/app -w /app $(NODE_IMAGE)
 PORT_FLAGS :=
 
 .PHONY: setup test typecheck lint build zip dev dev-firefox integration flush generate-assets
@@ -45,13 +47,13 @@ zip: ## store-ready zips (firefox zip includes sources zip automatically)
 # anything after it becomes the container command
 dev: PORT_FLAGS := -p 3000:3000
 dev: ## chromium dev build with HMR; load .output/chrome-mv3-dev as unpacked
-	@echo "HMR server: http://localhost:3000 (keep this running, then load .output/chrome-mv3-dev as unpacked)"
+	@echo "HMR endpoint http://localhost:3000 (404 in a browser is normal — leave it running, then load .output/chrome-mv3-dev as unpacked)"
 	$(DOCKER) npm run dev -- --port 3000 --host 0.0.0.0
 
 # ponytail: `dev-firefox` not `dev:firefox` — macOS ships GNU make 3.81, which rejects colons in targets
 dev-firefox: PORT_FLAGS := -p 3001:3001
 dev-firefox: ## firefox dev build; load .output/firefox-mv3-dev
-	@echo "HMR server: http://localhost:3001 (keep this running, then load .output/firefox-mv3-dev as a temporary add-on)"
+	@echo "HMR endpoint http://localhost:3001 (404 in a browser is normal — leave it running, then load .output/firefox-mv3-dev as a temporary add-on)"
 	$(DOCKER) npm run dev:firefox -- --port 3001 --host 0.0.0.0
 
 generate-assets: ## regenerate public/icons from assets/logo-{light,dark}.png

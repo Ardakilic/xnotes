@@ -49,9 +49,17 @@ describe('createPanel', () => {
     expect(panel.root.getAttribute('aria-label')).toBe('xNotes panel for @Jack');
     expect(panel.root.textContent).toContain('@Jack');
     expect(panel.root.querySelector('button.xn-add')).not.toBeNull();
-    expect(panel.root.querySelector('a.xn-manager')).not.toBeNull();
+    expect(panel.root.querySelector('button.xn-manager')).not.toBeNull();
     expect(panel.root.querySelector('textarea')).toBeNull();
     expect(panel.isEditing()).toBe(false);
+  });
+
+  it('renders empty-state actions as spaced pill buttons', async () => {
+    const panel = createPanel('jack', makeHooks(null));
+    await flush();
+    const actions = need(panel.root.querySelector('.xn-actions'));
+    expect(actions.querySelector('button.xn-add')).not.toBeNull();
+    expect(actions.querySelector('button.xn-manager')).not.toBeNull();
   });
 
   it('loads an existing note into view mode with its accent color', async () => {
@@ -199,12 +207,11 @@ describe('createPanel', () => {
     expect(panel.root.querySelector('.xn-note-text')).toBeNull();
   });
 
-  it('opens the manager via the All notes link', async () => {
+  it('opens the manager via the All notes button', async () => {
     const hooks = makeHooks(null);
     const panel = createPanel('jack', hooks);
     await flush();
-    const link = need(panel.root.querySelector<HTMLAnchorElement>('a.xn-manager'));
-    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    need(panel.root.querySelector<HTMLButtonElement>('button.xn-manager')).click();
     expect(hooks.openManager).toHaveBeenCalledTimes(1);
   });
 

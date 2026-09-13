@@ -114,8 +114,14 @@ textarea {
   margin-top: 8px;
 }
 
-.view-row .view-btn {
-  margin-left: 0;
+.chip-bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.view-row .view-btn:first-of-type {
+  margin-left: auto;
 }
 
 .view-btn[aria-pressed='true'] {
@@ -252,6 +258,11 @@ textarea {
   white-space: nowrap;
 }
 
+.note-userid {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .note-actions {
   display: flex;
   gap: 6px;
@@ -265,6 +276,20 @@ textarea {
 
 .handle-link:hover {
   text-decoration: underline;
+}
+
+.note-formerly {
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.note-formerly-block {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .notes-cards {
@@ -285,6 +310,7 @@ textarea {
 
 .note-card .note-text {
   margin: 0;
+  min-height: 3em;
 }
 
 .note-card-head {
@@ -292,6 +318,10 @@ textarea {
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
+}
+
+.note-card .note-actions {
+  margin-top: auto;
 }
 
 .edit-form {
@@ -309,6 +339,12 @@ textarea {
   flex-wrap: wrap;
 }
 
+.edit-form .swatches .chip {
+  min-height: 18px;
+  min-width: 40px;
+  padding: 4px 12px;
+}
+
 .empty-state {
   color: var(--muted);
   padding: 24px 0;
@@ -323,6 +359,10 @@ fieldset.backend-fields {
   gap: 8px;
 }
 
+fieldset.backend-fields[hidden] {
+  display: none;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -331,8 +371,21 @@ fieldset.backend-fields {
   max-width: 480px;
 }
 
-.field input[type='checkbox'] {
-  align-self: flex-start;
+.field-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.field-checkbox .field-error,
+.field-checkbox .field-hint {
+  flex-basis: 100%;
+}
+
+.field-hint {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .field-error {
@@ -366,6 +419,20 @@ fieldset.backend-fields {
 
 .sync-interval {
   width: 80px;
+}
+
+.settings-footer {
+  margin-top: 24px;
+  color: var(--muted);
+  font-size: 13px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.settings-footer a {
+  color: var(--accent);
 }
 
 #import-file,

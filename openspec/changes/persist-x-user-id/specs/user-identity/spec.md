@@ -38,7 +38,7 @@ The system SHALL learn the stable digits-only user ID for a visited profile from
 
 ### Requirement: Local-only alias store
 
-The system SHALL persist learned bindings of lowercased handle to user ID plus observation time in local-only storage. The alias store SHALL NEVER be synced to remotes, included in the uploaded sync blob, or included in exports.
+The system SHALL persist learned bindings of lowercased handle to user ID plus observation time in local-only storage. The alias store SHALL NEVER be synced to remotes or included in the uploaded sync blob. The alias store SHALL be included in user-initiated JSON export backups so rename history survives export/import round-trips.
 
 #### Scenario: Alias written on learn
 
@@ -50,10 +50,20 @@ The system SHALL persist learned bindings of lowercased handle to user ID plus o
 - **WHEN** sync uploads the store to a backend after aliases have been learned
 - **THEN** the uploaded payload contains notes and deletion markers only, with no alias bindings
 
-#### Scenario: Alias absent from export
+#### Scenario: Alias present in export
 
 - **WHEN** the user exports a backup after aliases have been learned
-- **THEN** the exported file contains notes and deletion markers only, with no alias bindings
+- **THEN** the exported file contains the alias bindings alongside notes and deletion markers
+
+#### Scenario: Alias restored on import
+
+- **WHEN** the user imports a backup containing alias bindings into an empty profile
+- **THEN** the formerly-known-handle context renders for renamed notes
+
+#### Scenario: Old exports without aliases still import
+
+- **WHEN** the user imports a backup file that carries no alias bindings
+- **THEN** the import succeeds with an empty alias map and no formerly-known-handle context
 
 ### Requirement: Rename policy
 

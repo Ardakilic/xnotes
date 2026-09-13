@@ -14,7 +14,8 @@ export function filterNotes(
       if (
         q !== '' &&
         !note.handle.toLowerCase().includes(q) &&
-        !note.text.toLowerCase().includes(q)
+        !note.text.toLowerCase().includes(q) &&
+        !(note.userId ?? '').includes(q)
       ) {
         return false;
       }

@@ -114,17 +114,6 @@
   border-color: #f4212e;
 }
 
-.xn-manager {
-  font: inherit;
-  color: #1d9bf0;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.xn-manager:hover {
-  text-decoration: underline;
-}
-
 .xn-editor {
   display: block;
   box-sizing: border-box;

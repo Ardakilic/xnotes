@@ -4,6 +4,7 @@ import {
   emptyAliases,
   getAlias,
   lookupByUserId,
+  mergeAliases,
   recordObservation,
   toAliasStore,
   type AliasStore,
@@ -103,17 +104,60 @@ describe('alias storage round-trip', () => {
   });
 });
 
+describe('mergeAliases', () => {
+  it('unions disjoint maps', () => {
+    const local = recordObservation(emptyAliases(), 'jack', '111', 100);
+    const imported = recordObservation(emptyAliases(), 'jill', '222', 200);
+    expect(mergeAliases(local, imported)).toEqual({
+      jack: { userId: '111', observedAt: 100 },
+      jill: { userId: '222', observedAt: 200 },
+    });
+  });
+
+  it('keeps the newer observation on conflict', () => {
+    const local = recordObservation(emptyAliases(), 'jack', '111', 100);
+    const imported = recordObservation(emptyAliases(), 'jack', '222', 200);
+    expect(getAlias(mergeAliases(local, imported), 'jack')).toEqual({
+      userId: '222',
+      observedAt: 200,
+    });
+    expect(getAlias(mergeAliases(imported, local), 'jack')).toEqual({
+      userId: '222',
+      observedAt: 200,
+    });
+  });
+
+  it('keeps the local binding on equal timestamps', () => {
+    const local = recordObservation(emptyAliases(), 'jack', '111', 100);
+    const imported = recordObservation(emptyAliases(), 'jack', '222', 100);
+    expect(getAlias(mergeAliases(local, imported), 'jack')).toEqual({
+      userId: '111',
+      observedAt: 100,
+    });
+  });
+
+  it('leaves the local store untouched', () => {
+    const local = recordObservation(emptyAliases(), 'jack', '111', 100);
+    const imported = recordObservation(emptyAliases(), 'jill', '222', 200);
+    mergeAliases(local, imported);
+    expect(local).toEqual({ jack: { userId: '111', observedAt: 100 } });
+  });
+});
+
 describe('local-only exclusion', () => {
-  it('keeps alias data out of the sync blob and the export file', () => {
+  it('keeps alias data out of the sync blob while the export file carries it', () => {
     const store = storeWithNote();
     const aliases = recordObservation(emptyAliases(), 'aliasedhandle', '999888777', 100);
     const blobText = new TextDecoder().decode(encodeStore(store));
     expect(blobText).not.toContain('999888777');
     expect(blobText).not.toContain('aliasedhandle');
-    const { json } = exportStoreJson(store);
-    expect(json).not.toContain('999888777');
-    expect(json).not.toContain('aliasedhandle');
-    expect(parseImportFile(json)).toEqual(store);
+    const { json } = exportStoreJson(store, aliases);
+    expect(json).toContain('999888777');
+    expect(json).toContain('aliasedhandle');
+    expect(parseImportFile(json)).toEqual({
+      store,
+      aliases: { aliasedhandle: { userId: '999888777', observedAt: 100 } },
+    });
     expect(getAlias(aliases, 'aliasedhandle')?.userId).toBe('999888777');
   });
 });

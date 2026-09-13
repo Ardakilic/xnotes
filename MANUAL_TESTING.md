@@ -86,3 +86,17 @@ profile page: `document.querySelectorAll('script[type="application/ld+json"]')` 
       local alias edit) → visit B → note follows with a "Previously @A" hint; old key tombstoned
 - [ ] Hijack end-to-end: note handle H (ID A learned), H is taken by a new owner (ID B) → visit H
       → panel shows the empty state (no old text/color leak); manager lists the orphan for review
+
+## 9. Options backend-section visibility (hidden-vs-display fix)
+
+Regression for the screenshot bug where both WebDAV/S3 `<fieldset>`s stayed visible with
+backend "None (local only)": author-level `display: flex` overrode the UA `[hidden]` rule,
+so `syncVisibility()` setting `.hidden` had no visual effect (unit tests assert the
+property, which was always correct — only real rendering shows this).
+
+- [ ] Backend "None (local only)" → both WebDAV and S3 sections hidden
+- [ ] Backend "None (local only)" → sync interval, encrypt toggle, passphrase field,
+      passphrase memory note, and Test connection button hidden; backend dropdown and Save stay visible
+- [ ] Backend "WebDAV" → only the WebDAV section visible, plus all sync-only controls visible
+- [ ] Backend "S3" → only the S3 section visible, plus all sync-only controls visible
+- [ ] Switching backends preserves unsaved field values (no save/reload between switches)

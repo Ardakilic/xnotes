@@ -28,6 +28,7 @@ import './style.css';
 const ANCHOR_SELECTOR = '[data-testid="primaryColumn"] [data-testid="UserName"]';
 const ANCHOR_POLL_MS = 250;
 const ANCHOR_TIMEOUT_MS = 4000;
+const RETRY_TIMEOUT_MS = 2000;
 const TICK_MS = 2000;
 
 /**
@@ -53,7 +54,8 @@ function normalizeLower(handle: string): string {
  * rename/hijack policy. Records the observation so the alias reflects the
  * current holder (overwrite on hijack is deliberate); moves a note from a
  * previously-bound handle on rename (preserving text/color/createdAt,
- * tombstoning the old key, never overwriting an existing new-handle note);
+ * tombstoning the old key, clearing any tombstone on the revisited handle,
+ * never overwriting an existing new-handle note);
  * backfills userId-less notes without overwriting: no prior binding stamps
  * the observed ID (first-visit backfill), an agreeing binding stamps the
  * observed ID, a disagreeing binding pins the prior owner ID so the
@@ -88,8 +90,9 @@ export async function learnIdentityForProfile(
     return unknown;
   }
   const aliasBefore = getAlias(aliases, handleLower);
+  const updatedAliases = recordObservation(aliases, handle, observedId);
   try {
-    await saveAliases(recordObservation(aliases, handle, observedId));
+    await saveAliases(updatedAliases);
   } catch {
     return unknown;
   }
@@ -99,12 +102,19 @@ export async function learnIdentityForProfile(
     const current = store.notes[handleLower] ?? null;
     if (current === null) {
       let best: NoteRecord | null = null;
-      const others = lookupByUserId(aliases, observedId).filter(
+      const others = lookupByUserId(updatedAliases, observedId).filter(
         (candidate) => candidate !== handleLower,
       );
+      for (const [key, note] of Object.entries(store.notes)) {
+        if (key !== handleLower && note.userId === observedId && !others.includes(key)) {
+          others.push(key);
+        }
+      }
       for (const candidate of others) {
         const note = store.notes[candidate] ?? null;
-        if (note !== null && (best === null || note.updatedAt > best.updatedAt)) best = note;
+        if (note === null) continue;
+        if (note.userId !== undefined && note.userId !== observedId) continue;
+        if (best === null || note.updatedAt > best.updatedAt) best = note;
       }
       if (best !== null) {
         const bestLower = best.handleLower;
@@ -119,6 +129,7 @@ export async function learnIdentityForProfile(
         };
         delete store.notes[bestLower];
         store.tombstones[bestLower] = now;
+        delete store.tombstones[handleLower];
         await saveStore(store);
         renamedFrom = best.handle;
       }
@@ -138,21 +149,72 @@ export async function learnIdentityForProfile(
 /**
  * Read the note visible on a profile: the stored note unless its recorded
  * user ID disagrees with the currently observed page ID (hijack withhold
- * shows the empty state). Unknown IDs on either side load by handle.
- * Fail-soft on DOM reads; storage errors propagate like before.
+ * shows the empty state). A note with no user ID and an observed ID is
+ * stamped with the observed ID (same trust as the first-visit learn
+ * backfill: same handle, same observed source) and shown; a present,
+ * disagreeing user ID is still withheld without writing. Fail-soft on DOM
+ * reads and on the backfill write; storage reads behave like before.
  */
-async function loadVisibleNote(handleLower: string): Promise<NoteRecord | null> {
+export async function loadVisibleNote(handleLower: string): Promise<NoteRecord | null> {
   const store = await getStore();
   const note = store.notes[handleLower] ?? null;
-  if (note === null || note.userId === undefined) return note;
   let observed: string | null;
   try {
     observed = learnUserId(document, handleLower);
   } catch {
     return note;
   }
-  if (observed === null || observed === note.userId) return note;
+  if (observed === null) return note;
+  if (note !== null && note.userId === observed) return note;
+  let best: NoteRecord | null = null;
+  for (const candidate of Object.values(store.notes)) {
+    if (candidate.userId !== observed) continue;
+    if (best === null || candidate.updatedAt > best.updatedAt) best = candidate;
+  }
+  if (best !== null) return best;
+  if (note === null) return null;
+  if (note.userId === undefined) {
+    note.userId = observed;
+    try {
+      await saveStore(store);
+    } catch {
+      // ponytail: fail-soft — the note still shows; the next visit retries the stamp
+    }
+    return note;
+  }
   return null;
+}
+
+export async function retryLearnWhenUnknown(
+  handle: string,
+  doc: Document,
+  first: LearnOutcome,
+  token?: { stale(): boolean },
+): Promise<LearnOutcome | null> {
+  if (first.observedId !== null) return null;
+  if (token !== undefined && token.stale()) return null;
+  const deadline = Date.now() + RETRY_TIMEOUT_MS;
+  for (;;) {
+    let seen: string | null;
+    try {
+      seen = learnUserId(doc, handle);
+    } catch {
+      seen = null;
+    }
+    if (seen !== null) break;
+    if (Date.now() >= deadline) break;
+    if (token !== undefined && token.stale()) return null;
+    await sleep(ANCHOR_POLL_MS);
+  }
+  if (token !== undefined && token.stale()) return null;
+  let second: LearnOutcome;
+  try {
+    second = await learnIdentityForProfile(handle, doc);
+  } catch {
+    return null;
+  }
+  if (token !== undefined && token.stale()) return null;
+  return second;
 }
 
 function contextAlive(): boolean {
@@ -292,16 +354,31 @@ export default defineContentScript({
       if (profile !== null) {
         const handle = profile.handle;
         const step = async (): Promise<void> => {
-          let former: string | null = null;
+          let first: LearnOutcome;
           try {
-            former = (await learnIdentityForProfile(handle, document)).renamedFrom;
+            first = await learnIdentityForProfile(handle, document);
           } catch {
-            former = null;
+            first = { observedId: null, renamedFrom: null, withheld: false };
           }
           try {
-            await mountPanel(token, handle, former);
+            await mountPanel(token, handle, first.renamedFrom);
           } catch {
             // ponytail: fail-soft — a mount failure must not break the queue
+          }
+          const second = await retryLearnWhenUnknown(handle, document, first, token);
+          if (second === null || token.stale()) return;
+          if (second.renamedFrom !== null) {
+            teardownPanel();
+            if (token.stale()) return;
+            try {
+              await mountPanel(token, handle, second.renamedFrom);
+            } catch {
+              // ponytail: fail-soft — a mount failure must not break the queue
+            }
+          } else if (second.observedId !== null && panel !== null && currentHandle === handle) {
+            const refreshed = await loadVisibleNote(handle.toLowerCase());
+            if (token.stale() || panel === null || currentHandle !== handle) return;
+            panel.refresh(refreshed);
           }
         };
         learnChain = learnChain.then(step, step);

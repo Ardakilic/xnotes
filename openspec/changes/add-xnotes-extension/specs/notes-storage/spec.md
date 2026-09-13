@@ -82,16 +82,21 @@ Per-device sync state (`xnotes:sync-state`), backend settings/credentials (`xnot
 
 ### Requirement: JSON export
 
-The system SHALL export the full store as a JSON file named with the pattern `xnotes-backup-YYYYMMDD.json` containing the `StoreV2` including tombstones.
+The system SHALL export the full store as a JSON file named with the pattern `xnotes-backup-YYYYMMDD.json` containing the `StoreV2` including tombstones plus the local-only alias map so rename history survives round-trips.
 
 #### Scenario: Export contains tombstones
 
 - **WHEN** the user exports after deleting a note
 - **THEN** the downloaded JSON includes the tombstone entry so re-import cannot resurrect the note
 
+#### Scenario: Export contains aliases
+
+- **WHEN** the user exports after aliases have been learned
+- **THEN** the downloaded JSON includes the alias bindings so the formerly-known-handle context is restored on import
+
 ### Requirement: JSON import with schema v1 compatibility
 
-The system SHALL import JSON in both schema v2 and the reference extension's schema v1 shape (`{ schemaVersion: 1, notes: {...} }`, no tombstones), converting v1 by adding an empty tombstone map. Import SHALL support two modes: `merge` (per-entry last-write-wins through the sync merge function) and `replace` (full overwrite after explicit confirmation).
+The system SHALL import JSON in both schema v2 and the reference extension's schema v1 shape (`{ schemaVersion: 1, notes: {...} }`, no tombstones), converting v1 by adding an empty tombstone map. Files without an alias map SHALL import with an empty alias map. Import SHALL support two modes: `merge` (per-entry last-write-wins through the sync merge function, alias bindings unioned with the newer `observedAt` winning per handle) and `replace` (full overwrite after explicit confirmation, aliases included).
 
 #### Scenario: Import v1 export
 
