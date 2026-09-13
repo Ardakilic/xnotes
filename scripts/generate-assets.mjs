@@ -173,23 +173,11 @@ console.log(
   `logo-dark.png: avg luminance of non-transparent pixels ${sd.avgLum.toFixed(1)}/255, non-transparent coverage ${(sd.coverage * 100).toFixed(1)}%`,
 );
 
-// ponytail: naive "brighter average = dark-theme icon" misreads these assets — logo-dark is a
-// dark filled tile whose bright glyph is drowned by its plate (avg 68) while logo-light's white
-// accents inflate its average (avg 74). A dark filled tile (coverage >= 50%, avg < 128) whose
-// glyph stays bright on dark toolbars is the dark-UI variant; lineart ink is the light-UI one.
-const isDarkTile = (s) => s.coverage >= 0.5 && s.avgLum < 128;
-const darkThemeSource =
-  isDarkTile(sd) !== isDarkTile(sl)
-    ? isDarkTile(sd)
-      ? dark
-      : light
-    : sl.avgLum > sd.avgLum
-      ? light
-      : dark;
-const lightThemeSource = darkThemeSource === light ? dark : light;
-console.log(
-  `Decision: ${darkThemeSource === dark ? 'logo-dark.png (dark tile, bright glyph -> reads on dark UI)' : 'logo-light.png'} is the dark-theme icon (icon-*-dark.png, wired to theme_icons.light — that key shows on light-text/dark themes); ${lightThemeSource === light ? 'logo-light.png (dark-ink lineart -> reads on light UI)' : 'logo-dark.png'} is the light-theme icon (icon-*-light.png, wired to theme_icons.dark — shows on dark-text/light themes) and the default manifest icons set`,
-);
+// ponytail: logo-dark feeds all variants as stopgap — logo-light lineart has too much
+// transparent margin at toolbar sizes; restore variant selection once tightened.
+const darkThemeSource = dark;
+const lightThemeSource = dark;
+console.log('Decision: logo-dark.png forced for all variants (stopgap)');
 
 mkdirSync(join(root, 'public/icons'), { recursive: true });
 for (const size of SIZES) {
