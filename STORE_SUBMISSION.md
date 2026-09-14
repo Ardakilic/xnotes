@@ -7,7 +7,7 @@ Everything a human must do manually to publish xNotes. Text blocks are paste-rea
 1. One-time $5 developer registration at <https://chrome.google.com/webstore/devconsole> (skip if already registered).
 2. Re-shoot screenshots at **exactly 1280x800** (or 640x400) — the current ones in `assets/screenshots/` are the wrong sizes and will be rejected. At minimum: the profile panel on x.com, and the all-notes manager.
 3. Create a small promotional tile at **440x280** (optional but recommended for store visibility) and upload it in the dashboard alongside the screenshots before submitting.
-4. Publish PRIVACY.md at a public URL and enter it in the dashboard. Use the GitHub blob URL: <https://github.com/Ardakilic/xnotes/blob/main/PRIVACY.md> (verified via `git remote get-url origin`).
+4. Publish privacy_policy.md at a public URL and enter it in the dashboard. Use the GitHub blob URL: <https://github.com/Ardakilic/xnotes/blob/main/privacy_policy.md> (verified via `git remote get-url origin`).
 5. Upload `.output/xnotes-0.1.0-chrome.zip`.
 6. Paste the dashboard texts (below): single purpose, permission justifications, short + detailed description.
 7. Answer the data-use disclosure (below) — all "No" except website-content reading on x.com/twitter.com and authentication info (see note below).

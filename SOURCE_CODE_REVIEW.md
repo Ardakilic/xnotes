@@ -26,5 +26,5 @@ make typecheck lint test integration
 
 ## Notes for reviewers
 
-- The extension communicates only with x.com/twitter.com (content script) and a user-configured sync backend (optional). See `PRIVACY.md`.
+- The extension communicates only with x.com/twitter.com (content script) and a user-configured sync backend (optional). See `privacy_policy.md`.
 - No remote code is loaded; no eval; content-security-policy-friendly DOM construction throughout.

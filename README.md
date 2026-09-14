@@ -7,7 +7,7 @@ Private notes for X/Twitter profiles. Local-first, with optional end-to-end encr
 - Notes are keyed by profile handle and shown right on X profile pages, with 11 color labels and avatar badges.
 - Everything works offline. Sync is an opt-in upgrade to a backend **you** control (dumb storage + client-side merge, floccus-style). No server-side code of ours exists anywhere.
 - One codebase builds both Chromium MV3 (`background.service_worker`) and Firefox/Gecko MV3 (`background.scripts` event page).
-- No telemetry. Notes never leave your machine unless you configure a backend. See [PRIVACY.md](PRIVACY.md).
+- No telemetry. Notes never leave your machine unless you configure a backend. See [privacy_policy.md](privacy_policy.md).
 
 ## Features
 
@@ -162,7 +162,7 @@ Everything not unit-testable (real-browser behavior, service-worker torture, mul
 
 ## Store packaging
 
-`make zip` produces `.output/xnotes-<version>-chrome.zip`, `.output/xnotes-<version>-firefox.zip` and the AMO sources zip (automatic for the Firefox target). See [SOURCE_CODE_REVIEW.md](SOURCE_CODE_REVIEW.md) for AMO review/build notes and [PRIVACY.md](PRIVACY.md) for the privacy policy.
+`make zip` produces `.output/xnotes-<version>-chrome.zip`, `.output/xnotes-<version>-firefox.zip` and the AMO sources zip (automatic for the Firefox target). See [SOURCE_CODE_REVIEW.md](SOURCE_CODE_REVIEW.md) for AMO review/build notes and [privacy_policy.md](privacy_policy.md) for the privacy policy.
 
 ## License
 
