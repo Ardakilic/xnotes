@@ -1,7 +1,7 @@
 # xNotes — all workflows run through Docker; the host needs only make + Docker.
 # See openspec design D13 and the cross-browser-support spec ("Dockerized developer workflow").
 
-NODE_IMAGE := node:22-bookworm-slim
+NODE_IMAGE := node:24-bookworm-slim
 UNAME := $(shell uname)
 
 ifeq ($(UNAME),Linux)
