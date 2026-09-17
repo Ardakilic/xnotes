@@ -43,6 +43,7 @@ xNotes — a cross-browser MV3 extension (WXT + strict TypeScript, vanilla DOM) 
 - **No comments** except `ponytail:` markers documenting a deliberate simplification and its ceiling/upgrade path.
 - Tests are colocated (`foo.test.ts` next to `foo.ts`); DOM tests start with `// @vitest-environment happy-dom` (happy-dom is installed). Integration tests live in `tests/integration/` and only run via `make integration`.
 - Keep diffs minimal; delete over adding; reuse existing helpers before writing new ones.
+- **Conventional Commits:** every commit message follows `type(scope): subject` (e.g. `fix(sync): retry on 412`, `docs: link Firefox listing`). Scopes are the area touched (`sync`, `ui`, `core`, `docs`, `ci`, …); keep the subject imperative and under ~72 chars.
 
 ## Gotchas (learned the hard way — don't rediscover)
 

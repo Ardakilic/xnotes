@@ -2,7 +2,7 @@
 
 Private notes for X/Twitter profiles. Local-first, with optional end-to-end encrypted sync to your own WebDAV or S3-compatible storage.
 
-**Install:** [Chrome Web Store](https://chromewebstore.google.com/detail/xnotes/nlenfommikpdnafaahmbpnkljokjobdj) · Firefox version under review.
+**Install:** [Chrome Web Store](https://chromewebstore.google.com/detail/xnotes/nlenfommikpdnafaahmbpnkljokjobdj) · [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/xnotes/)
 
 - Notes are keyed by profile handle and shown right on X profile pages, with 11 color labels and avatar badges.
 - Everything works offline. Sync is an opt-in upgrade to a backend **you** control (dumb storage + client-side merge, floccus-style). No server-side code of ours exists anywhere.
