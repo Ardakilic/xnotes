@@ -304,7 +304,7 @@ export default defineContentScript({
       formerHandle?: string | null,
     ): Promise<void> {
       const deadline = Date.now() + ANCHOR_TIMEOUT_MS;
-      let anchor: Element | null = null;
+      let anchor: Element | null;
       for (;;) {
         if (stopped || token.stale()) return;
         anchor = document.querySelector(ANCHOR_SELECTOR);

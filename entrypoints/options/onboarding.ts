@@ -31,7 +31,7 @@ export function mountOnboarding(root: HTMLElement): void {
         try {
           ok = await browser.permissions.request({ origins: ORIGINS });
         } catch {
-          ok = false;
+          // ponytail: fail-soft — keep false when the request API throws
         }
         if (ok) banner.remove();
         else text.textContent = 'Permission was not granted — notes on profiles stay disabled.';
